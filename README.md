@@ -151,6 +151,10 @@ Returns list of _visit_ objects:
 
 Downloads the file content associated with a specified response within a specified visit
 
+`wget --content-disposition http://periscope.local/visits/1/allfiles`
+
+Downloads an archive of all response content
+
 ## Search requests and responses for a string of interest
 
 `curl http://periscope.local/search?q=abc123`
