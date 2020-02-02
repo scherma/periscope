@@ -119,6 +119,8 @@ let VisitTarget = async function(visit) {
 
   await page.screenshot({path: screenshot_file_path, fullPage: true});
 
+  await db.mark_complete(visit.visit_id);
+
   return [result, screenshot_uri_path];
 }
 
@@ -179,9 +181,27 @@ let VisitCreate = async function(target_id) {
 
   let visit = await db.add_visit(target_id, submittime);
 
-  visit = await VisitRun(visit.visit_id)
-
   return visit;
+}
+
+let VisitRun = async function(visit_id) {
+  return await db.get_visit(visit_id)
+  .then((visit) => {
+    if (visit) {
+      visit = visit[0];
+    } else {
+      throw `No visit found with id ${visit_id}`;
+    }
+    if (visit.time_actioned == null) {
+      return Visit(visit)
+      .then((action_time) => {
+        visit.time_actioned = action_time;
+        return visit;
+      });
+    } else {
+      return visit;
+    }
+  });
 }
 
 let date_folder = function(m) {
@@ -207,14 +227,19 @@ let data_dir = function(date_path, visit_id) {
 }
 
 let stitch_results = function(reqs, responses) {
+  // combine the database rows for requests with corresponding responses
+
   let data = {
     requests: {}
   };
 
   reqs.forEach((req_header) => {
     if (req_header.request_id in data.requests) {
+      // if we have already initialised the object for this request, just add the header to it
+      // headers are stored as an array because HTTP allows for repeat/duplicate headers
       data.requests[req_header.request_id].request_headers.push({[req_header.header_name]: req_header.header_value});
     } else {
+
       data.requests[req_header.request_id] = {
         request_time: req_header.request_time,
         request_url: req_header.request_url,
@@ -229,6 +254,7 @@ let stitch_results = function(reqs, responses) {
   });
 
   responses.forEach((resp_header) => {
+    // now that requests strucutre is created, responses can be added in to it
     if (data.requests[resp_header.request_id].response_time === null) {
       data.requests[resp_header.request_id].response_time = resp_header.response_time;
       data.requests[resp_header.request_id].file_id = resp_header.file_id;
@@ -245,6 +271,7 @@ let stitch_results = function(reqs, responses) {
 
 module.exports = {
   ExtractSavedFile: async function(visit_id, file_id) {
+    // unarchive a specific requested file so that it can be downloaded
     let visits = await db.get_visit(visit_id);
     let visit = visits[0];
     return new Promise((fulfill, reject) => {
@@ -270,29 +297,28 @@ module.exports = {
       });
     });
   },
-  VisitCreate: VisitCreate,
+  FilesArchive: async function(visit_id) {
+    // get path for archive for a visit
+    let visits = await db.get_visit(visit_id);
+    let visit = visits[0];
+    return new Promise((fulfill, reject) => {
+      let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
+      let zippath = path.join(d_dir, "files.tar.gz");
+      fulfill({path: zippath, name: `visit_${visit.visit_id}_files.tar.gz`});
+    });
+  },
+  VisitCreateNew: async function (target_id) {
+    // for an exisitng target, visit again
+    return VisitCreate(target_id)
+    .then((visit) => {
+      visit = VisitRun(visit[0].visit_id)
+      return visit;
+    });
+  },
   VisitList: async function(pagesize=20, page=1, complete) {
     return await db.list_visits(perPage=pagesize, currentPage=page, complete=complete);
   },
-  VisitRun: async function(visit_id) {
-    return await db.get_visit(visit_id)
-    .then((visit) => {
-      if (visit) {
-        visit = visit[0];
-      } else {
-        throw `No visit found with id ${visit_id}`;
-      }
-      if (visit.time_actioned == null) {
-        return Visit(visit)
-        .then((action_time) => {
-          visit.time_actioned = action_time;
-          return visit;
-        });
-      } else {
-        return visit;
-      }
-    });
-  },
+  VisitRun: VisitRun,
   VisitShow: async function(visit_id) {
     let [requests, responses] = await db.get_visit_results(visit_id);
     let results = stitch_results(requests, responses);
@@ -300,6 +326,7 @@ module.exports = {
     return { visit: visits[0], results: results }
   },
   RequestSearch: async function(searchstring) {
+    // needs improvement. lots of improvement.
     return Promise.all([db.search_requests(searchstring), db.search_responses(searchstring)]);
   },
   TargetAdd: async function(submitted_url) {

@@ -51,7 +51,7 @@ router.post("/targets/add", function(req, res, next) {
 });
 
 router.all("/targets/:id/new-visit", function(req, res, next) {
-  manager.VisitCreate(parseInt(req.params.id), base_only=true)
+  manager.VisitCreateNew(parseInt(req.params.id), base_only=true)
   .then((visit) => {
     if (visit) {
       res.send({
@@ -85,15 +85,6 @@ router.all("/visits", function(req, res, next) {
   });
 });
 
-router.all("/visits/:id/run", function(req, res, next) {
-  manager.VisitRun(parseInt(req.params.id))
-  .then((visit) => {
-    res.send({
-      visit
-    });
-  })
-});
-
 router.get("/visits/:visit_id/file/:fileno", function(req, res, next) {
   manager.ExtractSavedFile(parseInt(req.params.visit_id), parseInt(req.params.fileno))
   .then((filedata) => {
@@ -108,6 +99,17 @@ router.get("/visits/:visit_id/file/:fileno", function(req, res, next) {
             console.log(`Temp file ${filedata.path} deleted`);
           }
         });
+      }
+    });
+  });
+});
+
+router.get("/visits/:visit_id/allfiles", function(req, res, next) {
+  manager.FilesArchive(parseInt(req.params.visit_id))
+  .then((filedata) => {
+    res.download(filedata.path, filedata.name, function(err) {
+      if (err) {
+        throw err;
       }
     });
   });

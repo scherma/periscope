@@ -55,6 +55,7 @@ module.exports = {
     let reqrows = 0;
     let resprows = 0;
     requests.forEach((request) => {
+      // need to fix addition of rowCount - not working because it's inside a knex promise
       let r = pg.raw(req_sql, [visit_id, request.request_time, request.request_post_data, request.request_url, request.request_headers])
       .then((reqs) => {
         if (request.response_headers && reqs.rows) {
@@ -67,8 +68,6 @@ module.exports = {
           });
           reqrows += reqs.rowCount;
         }
-      }).then(() => {
-        pg("visits").update({completed: true}).where({visit_id: visit_id});
       }).catch((err) => {
         console.error(err.message);
       });
@@ -121,6 +120,9 @@ module.exports = {
       ).leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id})
       .paginate({perPage: perPage, currentPage: currentPage});
     }
+  },
+  mark_complete: function(visit_id) {
+    return pg("visits").update({completed: true}).where({visit_id: visit_id});
   },
   search_requests: function(searchterm, perPage=20, currentPage=1) {
     return pg("request_headers").select("*").leftJoin("requests", "request_headers.request_id", "requests.request_id").leftJoin("visits", "requests.visit_id", "visits.visit_id")

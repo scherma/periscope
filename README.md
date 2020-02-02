@@ -26,12 +26,6 @@ Returns the created _visit_ object
 }
 ```
 
-## Action a specified visit
-`curl http://periscope.local/visits/1/run`
-
-Causes chrome headless to visit the site linked to _visit\_id_ (1), logs resulting queries to the database, and stores response data as files
-Returns the visit object
-
 ## Get a list of targets
 `curl http://periscope.local/targets`
 
@@ -54,7 +48,7 @@ Returns list of _target_ objects:
 ## Get a list of visits to a specific target
 `curl http://periscope.local/targets/1`
 
-Returns list of _visit_ objects:
+Returns list of _visit_ objects for the specified target ID:
 ```
 {
     data: [
@@ -78,6 +72,27 @@ Returns list of _visit_ objects:
  
  Creates a new _visit_ entry in the database for the specified target
  Returns the created _visit_ object
+
+`curl http://periscope.local/visits`
+
+Returns list of _visit_ objects:
+```
+{
+    data: [
+        {
+            target_id: 1, 
+            visit_id: 1,
+            createtime: "2020-01-03T21:10:08.000Z", 
+            query: "https://www.google.com",
+            time_actioned: "2020-01-03T23:17:36.959Z",
+            completed: true,
+            screenshot_path: "/usr/local/unsafehex/periscope/api/public/images/20200103/1/screenshot.jpg"
+        },
+        {target_id: 1, visit_id: 2, ...}
+    ],
+    pagination: {pagination}
+}
+```
 
  ## Get the data for a specified visit ID
 
