@@ -89,13 +89,17 @@ module.exports = {
         "targets.target_id",
         "targets.query",
         "visits.*"
-      ).leftJoin("visits", "targets.target_id", "visits.target_id").paginate({perPage: perPage, currentPage: currentPage});
+      ).leftJoin("visits", "targets.target_id", "visits.target_id")
+      .orderBy("visits.visit_id", "desc")
+      .paginate({perPage: perPage, currentPage: currentPage});
     } else {
-      return pg("visits").select(
+      return pg("targets").select(
         "targets.target_id",
         "targets.query",
         "visits.*"
-      ).leftJoin("visits", "targets.target_id", "visits.target_id").where({completed: completed}).paginate({perPage: perPage, currentPage: currentPage});
+      ).leftJoin("visits", "targets.target_id", "visits.target_id").where({"visits.completed": completed})
+      .orderBy("visits.visit_id", "desc")
+      .paginate({perPage: perPage, currentPage: currentPage});
     }
   },
   list_targets: function(perPage=20, currentPage=1) {

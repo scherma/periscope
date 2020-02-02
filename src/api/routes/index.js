@@ -71,6 +71,20 @@ router.all("/targets/:id/new-visit", function(req, res, next) {
   });
 });
 
+router.all("/visits", function(req, res, next) {
+  let page = req.query.page ? parseInt(req.query.page) : 1;
+  let pagesize = req.query.pagesize ? parseInt(req.query.pagesize) : 20;
+  let completed = req.query.completed ? ["true", "t", "1"].includes(req.query.completed) : false;
+  manager.VisitList(pagesize=pagesize, page=page, completed=completed)
+  .then((rows) => {
+    res.send(rows);
+  }).catch((err) => {
+    console.log(err.message);
+    res.status = 400;
+    res.send(err);
+  });
+});
+
 router.all("/visits/:id/run", function(req, res, next) {
   manager.VisitRun(parseInt(req.params.id))
   .then((visit) => {
