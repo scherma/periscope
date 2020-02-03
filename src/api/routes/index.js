@@ -134,10 +134,31 @@ router.get("/visits/:id", function(req, res, next) {
 });
 
 router.get("/visits/:id/screenshot", function(req, res, next) {
-  manager.VisitShow(parseInt(req.params.id))
+  manager.VisitBase(parseInt(req.params.id))
   .then((visit) => {
     if (visit) {
-      res.redirect(visit.visit.screenshot_path);
+      res.redirect(visit.screenshot_path);
+    } else {
+      res.status(404);
+      res.send({ 
+        message: `No visits matching id`,
+        request_id: req.params.id
+      });
+    }
+  }).catch((err) => {
+    console.log(err.message);
+    res.status(400);
+    res.send(err);
+  });
+});
+
+router.get("/visits/:id/thumbnail", function(req, res, next) {
+  manager.VisitBase(parseInt(req.params.id))
+  .then((visit) => {
+    if (visit) {
+      const regex = /\.png/gi;
+      let thumbpath = visit.screenshot_path.replace(regex, "_thumb.png");
+      res.redirect(thumbpath);
     } else {
       res.status(404);
       res.send({ 

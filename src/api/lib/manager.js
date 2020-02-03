@@ -6,12 +6,13 @@ const moment = require("moment");
 const fs = require("fs");
 const path = require("path");
 const archiver = require("archiver");
+const gm = require("gm");
 const  { exec } = require("child_process");
 
 let VisitTarget = async function(visit) {
   const browser = await puppeteer.launch({args: ["--ignoreHTTPSErrors"]});
   const page = await browser.newPage();
-  page.setViewport({width: 1862, height: 1015, deviceScaleFactor: 1, isLandscape: true});
+  page.setViewport({width: 1903, height: 1064, deviceScaleFactor: 1, isLandscape: true});
   page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36");
 
   const result = [];
@@ -114,9 +115,20 @@ let VisitTarget = async function(visit) {
 
   archive.finalize();
 
-  let screenshot_file_path = path.join(images_folder(moment(visit.time)), `${visit.visit_id}.png`);
+  let imagedir = images_folder(moment(visit.time));
+
+  let screenshot_file_path = path.join(imagedir, `${visit.visit_id}.png`);
+  let screenshot_window_path = path.join(imagedir, `${visit.visit_id}_thumb.png`);
   let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
 
+  await page.screenshot({path: screenshot_window_path});
+  gm(screenshot_window_path)
+  .resize(null, 250)
+  .write(screenshot_window_path, function(err) {
+    if (err) {
+      console.error(`Failed to write thumbnail for ${visit.visit_id}: ${err.message}`);
+    }
+  });
   await page.screenshot({path: screenshot_file_path, fullPage: true});
 
   await db.mark_complete(visit.visit_id);
@@ -319,6 +331,10 @@ module.exports = {
     return await db.list_visits(perPage=pagesize, currentPage=page);
   },
   VisitRun: VisitRun,
+  VisitBase: async function(visit_id) {
+    let visits = await db.get_visit(visit_id);
+    return visits[0];
+  },
   VisitShow: async function(visit_id) {
     let [requests, responses] = await db.get_visit_results(visit_id);
     let results = stitch_results(requests, responses);

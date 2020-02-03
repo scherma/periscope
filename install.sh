@@ -35,7 +35,7 @@ SCRIPTDIR=$(dirname "$(realpath "$0")")
 function install_periscope_dependencies() {
 	echo -e "${GREEN}Running basic updates...${NC}"
     yum update -y
-    yum install nginx tcpdump wget net-tools curl epel-release yum-utils rsync
+    yum install nginx tcpdump wget net-tools curl epel-release yum-utils rsync ImageMagick GraphicsMagick
 
     mkdir /tmp/periscope/install
     cd /tmp/periscope/install

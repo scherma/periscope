@@ -1,6 +1,6 @@
 {
-  "name": "periscope-api",
-  "version": "0.0.1",
+  "name": "turtle-headless",
+  "version": "0.0.0",
   "private": true,
   "scripts": {
     "start": "node ./bin/www"
@@ -12,6 +12,7 @@
     "debug": "~2.6.9",
     "express": "~4.16.1",
     "fs": "0.0.1-security",
+    "gm": "^1.23.1",
     "graphile-worker": "^0.2.0",
     "http-errors": "~1.6.3",
     "knex": "^0.20.4",
