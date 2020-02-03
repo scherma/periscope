@@ -315,8 +315,8 @@ module.exports = {
       return visit;
     });
   },
-  VisitList: async function(pagesize=20, page=1, complete) {
-    return await db.list_visits(perPage=pagesize, currentPage=page, complete=complete);
+  VisitList: async function(pagesize=20, page=1) {
+    return await db.list_visits(perPage=pagesize, currentPage=page);
   },
   VisitRun: VisitRun,
   VisitShow: async function(visit_id) {
@@ -358,7 +358,7 @@ module.exports = {
   TargetList: async function(pagesize=20, page=1) {
     return await db.list_targets(perPage=pagesize, currentPage=page);
   },
-  TargetVisits: async function(target_id, pagesize=20, page=1, complete=false) {
-    return await db.list_target_visits(target_id, perPage=pagesize, complete);
+  TargetVisits: async function(target_id, pagesize=20, page=1) {
+    return await db.list_target_visits(target_id, perPage=pagesize);
   }
 }

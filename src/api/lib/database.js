@@ -82,44 +82,25 @@ module.exports = {
   set_screenshot_path: function(screenshot_path, visit_id) {
     return pg("visits").update({screenshot_path: screenshot_path}).where({visit_id: visit_id});
   },
-  list_visits: function(perPage=20, currentPage=1, completed) {
-    if (completed === null) {
-      return pg("targets").select(
-        "targets.target_id",
-        "targets.query",
-        "visits.*"
-      ).leftJoin("visits", "targets.target_id", "visits.target_id")
-      .orderBy("visits.visit_id", "desc")
-      .paginate({perPage: perPage, currentPage: currentPage});
-    } else {
-      return pg("targets").select(
-        "targets.target_id",
-        "targets.query",
-        "visits.*"
-      ).leftJoin("visits", "targets.target_id", "visits.target_id").where({"visits.completed": completed})
-      .orderBy("visits.visit_id", "desc")
-      .paginate({perPage: perPage, currentPage: currentPage});
-    }
+  list_visits: function(perPage=20, currentPage=1) {
+    return pg("targets").select(
+      "targets.target_id",
+      "targets.query",
+      "visits.*"
+    ).leftJoin("visits", "targets.target_id", "visits.target_id")
+    .orderBy("visits.visit_id", "desc")
+    .paginate({perPage: perPage, currentPage: currentPage});
   },
   list_targets: function(perPage=20, currentPage=1) {
     return pg("targets").select("*").paginate({perPage: perPage, currentPage: currentPage});
   },
-  list_target_visits: function(target_id, perPage=20, currentPage=1, complete=false) {
-    if (complete) {
-      return pg("targets").select(
-        "targets.target_id",
-        "targets.query",
-        "visits.*"
-      ).leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id, completed: complete})
-      .paginate({perPage: perPage, currentPage: currentPage});
-    } else {
-      return pg("targets").select(
-        "targets.target_id",
-        "targets.query",
-        "visits.*"
-      ).leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id})
-      .paginate({perPage: perPage, currentPage: currentPage});
-    }
+  list_target_visits: function(target_id, perPage=20, currentPage=1) {
+    return pg("targets").select(
+      "targets.target_id",
+      "targets.query",
+      "visits.*"
+    ).leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id})
+    .paginate({perPage: perPage, currentPage: currentPage});
   },
   mark_complete: function(visit_id) {
     return pg("visits").update({completed: true}).where({visit_id: visit_id});

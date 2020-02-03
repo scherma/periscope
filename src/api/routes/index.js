@@ -25,9 +25,8 @@ router.get("/targets", function(req, res, next) {
 router.get("/targets/:id", function(req, res, next) {
   let page = req.query.page ? parseInt(req.query.page) : 1;
   let pagesize = req.query.pagesize ? parseInt(req.query.pagesize) : 20;
-  let complete = req.query.complete ? req.query.complete : null;
 
-  manager.TargetVisits(parseInt(req.params.id), pagesize=pagesize, page=page, complete=complete)
+  manager.TargetVisits(parseInt(req.params.id), pagesize=pagesize, page=page)
   .then((rows) => {
     res.send(rows);
   }).catch((err) => {
@@ -74,8 +73,8 @@ router.all("/targets/:id/new-visit", function(req, res, next) {
 router.all("/visits", function(req, res, next) {
   let page = req.query.page ? parseInt(req.query.page) : 1;
   let pagesize = req.query.pagesize ? parseInt(req.query.pagesize) : 20;
-  let completed = req.query.completed ? ["true", "t", "1"].includes(req.query.completed) : false;
-  manager.VisitList(pagesize=pagesize, page=page, completed=completed)
+
+  manager.VisitList(pagesize, page)
   .then((rows) => {
     res.send(rows);
   }).catch((err) => {
