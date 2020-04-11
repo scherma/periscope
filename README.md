@@ -1,9 +1,8 @@
 # Periscope installation
 
-Currently only tested with CentOS 7
-- Run `install.sh` as root (_N.B. this uses 'curl https://abc | bash -' as this is the method provided by NodeJS to install the Node repos_)
+Working with CentOS 8:
+- Run `install.sh` as root
 - Supply a database password and account name of the user __Periscope__ will be running as
-- After installation, run `node /usr/local/unsafehex/periscope/api/node_modules/nodemon/bin/nodemon.js /usr/local/unsafehex/periscope/api/bin/www` to start the server
 
 # Periscope API reference
 
@@ -202,7 +201,6 @@ Returns a JSON object with a list of requests and list of responses where a head
 
 `curl http://periscope.local/visit/2/screenshot`
 
-(to do)
 Returns 302 to `/images/$visit_date/$visit_id`
 
 `curl http://periscope.local/images/20200105/2.png`
