@@ -8,8 +8,6 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 fail=0
 
-PGVERSION=12
-
 echo -e "${GREEN}Preparing to install...${NC}"
 
 read -p "Specify the user which the URL sandbox will run as: " LABUSER
@@ -19,49 +17,26 @@ if [ -z "$(getent passwd "$LABUSER")" ]; then
     exit 1
 fi
 
-#echo "Please specify a name and password for the URL sandbox"
-
-#read -p "URL sandbox name: " SBXNAME
 read -s -p "Set database password: " DBPASS
-#echo ""
-#echo "You have specified the following settings:"
-#echo "Sandbox user: 			$LABUSER"
-#echo "Sandbox name: 			$SBXNAME"
-#read -p "Press enter to accept these settings and install the sandbox" CONTINUE
 echo -e "${GREEN}Proceeding with URL sandbox installation${NC}"
 
 SCRIPTDIR=$(dirname "$(realpath "$0")")
 
 function install_periscope_dependencies() {
 	echo -e "${GREEN}Running basic updates...${NC}"
-    yum update -y
-    yum install nginx tcpdump wget net-tools curl epel-release yum-utils rsync ImageMagick GraphicsMagick
+    dnf update -y
 
-    mkdir /tmp/periscope/install
-    cd /tmp/periscope/install
-
-    echo "${RED}WARNING: nodesource repos will be added by a script downloaded from https://rpm.nodesource.com${NC}" 
-
-    read -p "If you do not trust this site, exit the script NOW." CONTINUE
-
-    curl -sL https://rpm.nodesource.com/setup_10.x | bash -
-
-    yum install -y nodejs npm
-
-    yum-config-manager --setopt=base.exclude=postgresql\* --save base
-    yum-config-manager --setopt=updates.exclude=postgresql\* --save updates
-
-    wget https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
-    rpm -i pgdg-redhat-repo-latest.noarch.rpm
-
-    yum install -y postgresql$PGVERSION-server
+    # install basic tools
+    dnf install -y nginx tcpdump wget net-tools curl epel-release yum-utils rsync nodejs postgresql-server postgresql-contrib 
+    # install chrome dependencies
+    dnf install -y GraphicsMagick atk gtk3 alsa-lib-devel libXScrnSaver libXtst libXdamage libxComposite libX11
     
-    #sed -r 's/^(host.*127.0.0.1\/32\s+) ident/\1 md5/' /var/lib/pgsql/9.6/data/pg_hba.conf > /var/lib/pgsql/9.6/data/pg_hba.conf
-    #sed -r 's/^(host.*::1\/128\s+) ident/\1 md5/' /var/lib/pgsql/9.6/data/pg_hba.conf > /var/lib/pgsql/9.6/data/pg_hba.conf
+    # set postgres to use tcp socket auth with password instead of unix socket (needed by knex/pg)
+    sed -r 's/^(host.*127.0.0.1\/32\s+) ident/\1 md5/' /var/lib/pgsql/data/pg_hba.conf > /var/lib/pgsql/9.6/data/pg_hba.conf
+    sed -r 's/^(host.*::1\/128\s+) ident/\1 md5/' /var/lib/pgsql/data/pg_hba.conf > /var/lib/pgsql/9.6/data/pg_hba.conf
 
-    su -c "/usr/pgsql-$PGVERSION/bin/initdb -D /var/lib/pgsql/$PGVERSION/data" postgres
-
-    service postgresql-$PGVERSION restart
+    systemctl enable --now postgresql
+    systemctl restart postgresql
 }
 
 function prep_directories() {
@@ -76,23 +51,26 @@ function prep_directories() {
         \"dbpass\": \"$DBPASS\"
     }" > /usr/local/unsafehex/periscope/api/lib/options.json
 
+    # install nodejs dependencies
     cd /usr/local/unsafehex/periscope
-    npm i --save
-    cd /usr/local/unsafehex/periscope/api
     npm i --save
 
     chown -R $LABUSER:$LABUSER /usr/local/unsafehex
 }
 
 function configure_periscope_db() {
-	#test postgres install here
 	echo -e "${GREEN}Configuring database...${NC}"
+    postgresql-setup initdb
 	su -c "psql -c \"CREATE USER $LABUSER WITH PASSWORD '$DBPASS';\"" postgres
 	su -c "psql -c \"CREATE DATABASE periscope;\"" postgres
 	su -c "psql -q periscope < $SCRIPTDIR/schema.sql" $LABUSER
 }
 
-INSTALL_CMDS=["install_periscope_dependencies", "configure_periscope_db", "prep_directories"]
+function start_periscope() {
+    su -c "pm2 start  /usr/local/unsafehex/periscope/api/bin/www --name periscope"
+}
+
+INSTALL_CMDS=["install_periscope_dependencies", "configure_periscope_db", "prep_directories", "start_periscope"]
 
 for cmd in "${INSTALL_CMDS[@]}"; do
 	cmd

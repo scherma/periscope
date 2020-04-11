@@ -4,8 +4,19 @@
   "description": "Generate preview of web pages",
   "main": "index.js",
   "dependencies": {
+    "archiver": "^3.1.1",
+    "cookie-parser": "^1.4.5",
     "express": "^4.17.1",
-    "express-generator": "^4.16.1"
+    "express-generator": "^4.16.1",
+    "gm": "^1.23.1",
+    "knex": "^0.20.13",
+    "knex-paginate": "^1.2.0",
+    "moment": "^2.24.0",
+    "morgan": "^1.10.0",
+    "pg": "^8.0.2",
+    "puppeteer": "^2.1.1",
+    "request": "^2.88.2",
+    "request-promise-native": "^1.0.8"
   },
   "devDependencies": {},
   "scripts": {
