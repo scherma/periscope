@@ -70,7 +70,7 @@ function configure_periscope_db() {
 }
 
 function start_periscope() {
-    su -c "pm2 start  /usr/local/unsafehex/periscope/api/bin/www --name periscope"
+    su -c "pm2 start /usr/local/unsafehex/periscope/api/bin/www --name periscope --time" $LABUSER
 }
 
 INSTALL_CMDS=["install_periscope_dependencies", "configure_periscope_db", "prep_directories", "start_periscope"]

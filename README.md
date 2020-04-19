@@ -1,3 +1,7 @@
+# Introduction
+
+Periscope is a utility for gathering information on URLs without using your own browser. Using [puppeteer](https://github.com/puppeteer/puppeteer) it visits the site with Chromium headless and logs all of the resulting requests and responses. In addition, it uses [Don't FingerPrint Me](https://github.com/freethenation/DFPM) to identify potential browser fingerprinting.
+
 # Periscope installation
 
 Working with CentOS 8:
