@@ -7,17 +7,30 @@ const fs = require("fs");
 const path = require("path");
 const archiver = require("archiver");
 const gm = require("gm");
-const  { exec } = require("child_process");
+const { exec } = require("child_process");
+const dfpm = require("./DFPM/dfpm.js");
 
 let VisitTarget = async function(visit) {
-  const browser = await puppeteer.launch({args: ["--ignoreHTTPSErrors"]});
+  const browser = await puppeteer.launch({args: ["--ignoreHTTPSErrors", "--remote-debugging-port=9222"]});
   const page = await browser.newPage();
+
+  // inject fingerprint detection code
+  await dfpm.flipTheSwitch("127.0.0.1", 9222, true, false);
+  // allow time for it to load
+  await dfpm.sleep(5*1000);
+
+  // simulate a desktop display and browser
   page.setViewport({width: 1903, height: 1064, deviceScaleFactor: 1, isLandscape: true});
   page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36");
 
   const result = [];
+  const dfpm_detections = [];
+  let dfpm_info_count = 0;
   await page.setRequestInterception(true);
+
+
   page.on("request", request => {
+    // capture information about requests and responses
     const request_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
 
     request_client({
@@ -41,6 +54,7 @@ let VisitTarget = async function(visit) {
         response_size,
         response_body,
         response_time,
+        file_id: null
       });
 
       request.continue();
@@ -55,10 +69,65 @@ let VisitTarget = async function(visit) {
         response_headers: null,
         response_size: null,
         response_body: null,
-        response_time: null
+        response_time: null,
+        file_id: null
       });
     });
   });
+
+  page.on('console', msg => {
+    if (msg._type == "log") {
+      try {
+        let evt = JSON.parse(msg._text);
+        if (evt.level == "warning" || evt.level == "danger") {
+          // capture events that DFPM flags as suspicious
+          dfpm_detections.push(
+            {
+              visit_id: visit.visit_id,
+              method: evt.method,
+              dfpm_path: evt.path,
+              dfpm_level: evt.level,
+              dfpm_category: evt.catevory,
+              dfpm_url: evt.url,
+              dfpm_raw: evt
+            }
+          );
+        } else if (evt.level == "info") {
+          dfpm_info_count += 1;
+        }
+      } catch (err) {
+
+      }
+    }
+  });
+
+  page.on('message', msg => {
+    if (msg._type == "log") {
+      console.log(msg._text);
+      try {
+        let evt = JSON.parse(msg._text);
+        if (evt.level == "warning" || evt.level == "danger") {
+          // capture events that DFPM flags as suspicious
+          dfpm_detections.push(
+            {
+              visit_id: visit.visit_id,
+              method: evt.method,
+              dfpm_path: evt.path,
+              dfpm_level: evt.level,
+              dfpm_category: evt.catevory,
+              dfpm_url: evt.url,
+              dfpm_raw: evt
+            }
+          );
+        } else if (evt.level == "info") {
+          dfpm_info_count += 1;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  });
+
 
   const response = await page.goto(
     visit.query, 
@@ -70,11 +139,6 @@ let VisitTarget = async function(visit) {
 
   let d_path = date_folder(moment(visit.time));
   let d_dir = data_dir(d_path, visit.visit_id);
-
-  let requests_insert = [];
-  let responses_insert = [];
-  let request_headers_insert = [];
-  let response_headers_insert = [];
 
   let outfiles = fs.createWriteStream(path.join(d_dir, "files.tar.gz"));
   var archive = archiver("tar", {
@@ -95,17 +159,8 @@ let VisitTarget = async function(visit) {
   archive.pipe(outfiles);
 
   result.forEach((r, idx) => {
-    let reqdata = {
-      visit_id: visit.visit_id,
-      request_time: result.request_time,
-      request_post_data: result.request_post_data,
-      request_url: result.request_url,
-      request_index: idx
-    };
-
+    // tag file IDs into the output
     r.file_id = idx;
-
-    let fname = path.join(d_dir, `${idx}`);
 
     if (r.response_body === undefined || r.response_body === null) {
       r.response_body = '';
@@ -121,6 +176,7 @@ let VisitTarget = async function(visit) {
   let screenshot_window_path = path.join(imagedir, `${visit.visit_id}_thumb.png`);
   let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
 
+  // generate window view and convert it to thumbnail
   await page.screenshot({path: screenshot_window_path});
   gm(screenshot_window_path)
   .resize(null, 250)
@@ -129,11 +185,18 @@ let VisitTarget = async function(visit) {
       console.error(`Failed to write thumbnail for ${visit.visit_id}: ${err.message}`);
     }
   });
+  
+  // generate screenshot of entire page
   await page.screenshot({path: screenshot_file_path, fullPage: true});
 
-  await db.mark_complete(visit.visit_id);
+  // allow time before exiting browser process for fingerprint detection to generate results
+  await dfpm.sleep(10*1000);
+  await browser.close();
 
-  return [result, screenshot_uri_path];
+  await db.mark_complete(visit.visit_id);
+  console.log(`DFPM logged ${dfpm_info_count} info level events for visit ${visit.visit_id}`);
+
+  return [result, dfpm_detections, screenshot_uri_path];
 }
 
 
@@ -163,7 +226,7 @@ let Visit = async function(visit) {
     await db.set_actioned_time(visit.visit_id, action_time);
     console.log(`Visit ${visit.visit_id} actioned at ${action_time}`);
     VisitTarget(visit)
-    .then(([requests, screenshot_uri_path]) => {
+    .then(([requests, dfpm_detections, screenshot_uri_path]) => {
       db.add_requests(requests, visit.visit_id)
       .then(([req_inserts, resp_inserts]) => {
         console.log(`Inserted ${req_inserts} requests and ${resp_inserts} responses for visit ${visit.visit_id}`);
@@ -172,12 +235,13 @@ let Visit = async function(visit) {
         .catch((err) => {
           console.error(`Error setting screenshot path: ${err.message}`);
         });
-      }).catch((err) => {
-        let errorlog = path.join(d_dir, "error.log");
-        fs.appendFile(errorlog, err.message + "\n", function (e) {
-          console.error(`Encountered error processing visit ${visit.visit_id}; wrote to log`);
-          console.error(err.message);
-        });
+      });
+      db.add_dfpm(dfpm_detections);
+    }).catch((err) => {
+      let errorlog = path.join(d_dir, "error.log");
+      fs.appendFile(errorlog, err.message + "\n", function (e) {
+        console.error(`Encountered error processing visit ${visit.visit_id}; wrote to log`);
+        console.error(err.message);
       });
     });
 
@@ -269,7 +333,7 @@ let stitch_results = function(reqs, responses) {
     // now that requests strucutre is created, responses can be added in to it
     if (data.requests[resp_header.request_id].response_time === null) {
       data.requests[resp_header.request_id].response_time = resp_header.response_time;
-      data.requests[resp_header.request_id].file_id = resp_header.file_id;
+      data.requests[resp_header.request_id].file_id = typeof(resp_header.file_id) == "undefined" ? null : resp_header.file_id;
       data.requests[resp_header.request_id].response_size = resp_header.response_size;
     }
     
@@ -336,10 +400,10 @@ module.exports = {
     return visits[0];
   },
   VisitShow: async function(visit_id) {
-    let [requests, responses] = await db.get_visit_results(visit_id);
+    let [requests, responses, dfpm_detections] = await db.get_visit_results(visit_id);
     let results = stitch_results(requests, responses);
     let visits = await db.get_visit(visit_id);
-    return { visit: visits[0], results: results }
+    return { visit: visits[0], results: results, fingerprinting: dfpm_detections }
   },
   RequestSearch: async function(searchstring) {
     // needs improvement. lots of improvement.

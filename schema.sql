@@ -44,12 +44,25 @@ CREATE TABLE response_headers (
     header_value text
     );
 
+CREATE TABLE dfpm_detections (
+    dfpm_id SERIAL PRIMARY KEY,
+    visit_id integer,
+    method text,
+    dfpm_path text,
+    dfpm_level text,
+    dfpm_category text,
+    dfpm_url text,
+    dfpm_raw jsonb
+    );
+
+
 ALTER TABLE ONLY visits ADD CONSTRAINT target_id FOREIGN KEY (target_id) REFERENCES targets(target_id);
 ALTER TABLE ONLY requests ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 ALTER TABLE ONLY responses ADD CONSTRAINT request_id FOREIGN KEY (request_id) REFERENCES requests(request_id);
 ALTER TABLE ONLY responses ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 ALTER TABLE ONLY request_headers ADD CONSTRAINT request_id FOREIGN KEY (request_id) REFERENCES requests(request_id);
 ALTER TABLE ONLY response_headers ADD CONSTRAINT response_id FOREIGN KEY (response_id) REFERENCES responses(response_id);
+ALTER TABLE ONLY dfpm_detections ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 
 CREATE INDEX ON targets USING gin ( to_tsvector('english', query) );
 CREATE INDEX ON request_headers USING gin ( to_tsvector('english', header_value) );

@@ -31,7 +31,8 @@ module.exports = {
   get_visit_results: function(visit_id) {
     let reqs = pg("requests").select("*").leftJoin("request_headers", "requests.request_id", "request_headers.request_id").where({"requests.visit_id": visit_id});
     let resps = pg("responses").select("*").leftJoin("response_headers", "responses.response_id", "response_headers.response_id").where({"responses.visit_id": visit_id});
-    return Promise.all([reqs, resps]);
+    let dfpm = pg("dfpm_detections").select("*").where({visit_id: visit_id});
+    return Promise.all([reqs, resps, dfpm]);
   },
   get_visit: function(visit_id) {
     return pg("visits").select(
@@ -56,7 +57,7 @@ module.exports = {
     let resprows = 0;
     requests.forEach((request) => {
       // need to fix addition of rowCount - not working because it's inside a knex promise
-      let r = pg.raw(req_sql, [visit_id, request.request_time, request.request_post_data, request.request_url, request.request_headers])
+      pg.raw(req_sql, [visit_id, request.request_time, request.request_post_data, request.request_url, request.request_headers])
       .then((reqs) => {
         if (request.response_headers && reqs.rows) {
           pg.raw(resp_sql, [reqs.rows[0].request_id, visit_id, request.file_id, request.response_time, request.response_size, request.response_headers])
@@ -64,16 +65,21 @@ module.exports = {
             resprows += resps.rowCount;
           })
           .catch((err) => {
+            console.error([reqs.rows[0].request_id, visit_id, request.file_id, request.response_time, request.response_size, request.response_headers]);
             console.error(err.message);
           });
           reqrows += reqs.rowCount;
         }
       }).catch((err) => {
+        console.error([visit_id, request.request_time, request.request_post_data, request.request_url, request.request_headers]);
         console.error(err.message);
       });
     });
 
     return [reqrows, resprows];
+  },
+  add_dfpm: async function(detections) {
+    return pg.insert(detections).into("dfpm_detections");
   },
   set_actioned_time: function(visit_id, action_time) {
     let formatted = action_time.format("YYYY-MM-DD HH:mm:ss.SSS ZZ");

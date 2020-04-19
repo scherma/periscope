@@ -54,6 +54,9 @@ function prep_directories() {
     # install nodejs dependencies
     cd /usr/local/unsafehex/periscope
     npm i --save
+    cd /usr/local/unsafehex/periscope/api/lib
+    git clone https://github.com/freethenation/DFPM/
+    npm i --save
 
     chown -R $LABUSER:$LABUSER /usr/local/unsafehex
 }
