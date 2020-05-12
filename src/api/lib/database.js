@@ -21,11 +21,12 @@ module.exports = {
       createtime: formatted
     }).returning("*").into("targets");
   },
-  add_visit: function(target_id, submittime) {
+  add_visit: function(target_id, submittime, settings) {
     var formatted = submittime.format("YYYY-MM-DD HH:mm:ss ZZ");
     return pg.insert({
       target_id: target_id,
-      createtime: formatted
+      createtime: formatted,
+      settings: settings
     }).returning("*").into("visits");
   },
   get_visit_results: function(visit_id) {

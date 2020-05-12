@@ -10,7 +10,8 @@ CREATE TABLE visits (
     createtime timestamp with time zone,
     time_actioned timestamp with time zone, 
     completed bool DEFAULT FALSE,
-    screenshot_path text
+    screenshot_path text,
+    settings jsonb
     );
 
 CREATE TABLE requests (

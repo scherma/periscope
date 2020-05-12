@@ -37,7 +37,7 @@ router.get("/targets/:id", function(req, res, next) {
 });
 
 router.post("/targets/add", function(req, res, next) {
-  manager.TargetAdd(req.body.url)
+  manager.TargetAdd(req.body.url, req.query.devname)
   .then((visit) => {
     res.send({
       visit
@@ -50,7 +50,7 @@ router.post("/targets/add", function(req, res, next) {
 });
 
 router.all("/targets/:id/new-visit", function(req, res, next) {
-  manager.VisitCreateNew(parseInt(req.params.id), base_only=true)
+  manager.VisitCreateNew(parseInt(req.params.id), req.query.devname)
   .then((visit) => {
     if (visit) {
       res.send({
@@ -171,6 +171,18 @@ router.get("/visits/:id/thumbnail", function(req, res, next) {
     res.status(400);
     res.send(err);
   });
+});
+
+router.get("/deviceoptions", function(req, res, next) {
+  if (typeof(req.query.devname) == "undefined" || req.query.devname == "") {
+    let opts = manager.DeviceOptions();
+    console.log(opts);
+    res.send(opts);
+  } else {
+    let settings = manager.DeviceSettings(req.query.devname);
+    console.log(settings);
+    res.send(settings);
+  }
 });
 
 router.get("/search", function (req, res, next) {

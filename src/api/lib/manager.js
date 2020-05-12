@@ -1,5 +1,4 @@
 const url = require("url");
-const puppeteer = require("puppeteer");
 const request_client = require("request-promise-native");
 const db = require("./database");
 const moment = require("moment");
@@ -8,195 +7,210 @@ const path = require("path");
 const archiver = require("archiver");
 const gm = require("gm");
 const { exec } = require("child_process");
+const stager = require("./stager");
 const dfpm = require("./DFPM/dfpm.js");
 
+const periscopeDefaultDevice = {
+  viewport: {
+    width: 1903, 
+    height: 1064, 
+    deviceScaleFactor: 1, 
+    isLandscape: true,
+    isMobile: false,
+    hasTouch: false
+  },
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36"
+}
+
 let VisitTarget = async function(visit) {
-  const browser = await puppeteer.launch({args: ["--ignoreHTTPSErrors", "--remote-debugging-port=9222"]});
+  const browser = await stager.getPuppet();
   const page = await browser.newPage();
 
-  // inject fingerprint detection code
-  await dfpm.flipTheSwitch("127.0.0.1", 9222, true, false);
-  // allow time for it to load
-  await dfpm.sleep(5*1000);
+  try {
+    // simulate the options chosen (defaults to a desktop-like defined by periscopeDefaultDevice)
+    page.emulate(visit.settings);
+    //page.setViewport({width: 1903, height: 1064, deviceScaleFactor: 1, isLandscape: true});
+    //page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36");
 
-  // simulate a desktop display and browser
-  page.setViewport({width: 1903, height: 1064, deviceScaleFactor: 1, isLandscape: true});
-  page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36");
-
-  const result = [];
-  const dfpm_detections = [];
-  let dfpm_info_count = 0;
-  await page.setRequestInterception(true);
+    const result = [];
+    const dfpm_detections = [];
+    let dfpm_info_count = 0;
+    await page.setRequestInterception(true);
 
 
-  page.on("request", request => {
-    // capture information about requests and responses
-    const request_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
+    page.on("request", request => {
+      // capture information about requests and responses
+      const request_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
 
-    request_client({
-      uri: request.url(),
-      resolveWithFullResponse: true,
-    }).then(response => {
-      const request_url = request.url();
-      const request_headers = request.headers();
-      const request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
-      const response_headers = response.headers;
-      const response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
-      const response_body = response.body;
-      const response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
+      request_client({
+        uri: request.url(),
+        resolveWithFullResponse: true,
+      }).then(response => {
+        const request_url = request.url();
+        const request_headers = request.headers();
+        const request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
+        const response_headers = response.headers;
+        const response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
+        const response_body = response.body;
+        const response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
 
-      result.push({
-        request_url,
-        request_headers,
-        request_post_data,
-        request_time,
-        response_headers,
-        response_size,
-        response_body,
-        response_time,
-        file_id: null
-      });
+        result.push({
+          request_url,
+          request_headers,
+          request_post_data,
+          request_time,
+          response_headers,
+          response_size,
+          response_body,
+          response_time,
+          file_id: null
+        });
 
-      request.continue();
-    }).catch(error => {
-      console.error(error.message);
-      request.abort();
-      result.push({
-        request_url: request.url(),
-        request_time: request_time,
-        request_post_data: '',
-        request_headers: null,
-        response_headers: null,
-        response_size: null,
-        response_body: null,
-        response_time: null,
-        file_id: null
+        request.continue();
+      }).catch(error => {
+        console.error(error.message);
+        request.abort();
+        result.push({
+          request_url: request.url(),
+          request_time: request_time,
+          request_post_data: '',
+          request_headers: null,
+          response_headers: null,
+          response_size: null,
+          response_body: null,
+          response_time: null,
+          file_id: null
+        });
       });
     });
-  });
 
-  page.on('console', msg => {
-    if (msg._type == "log") {
-      try {
-        let evt = JSON.parse(msg._text);
-        if (evt.level == "warning" || evt.level == "danger") {
-          // capture events that DFPM flags as suspicious
-          dfpm_detections.push(
-            {
-              visit_id: visit.visit_id,
-              method: evt.method,
-              dfpm_path: evt.path,
-              dfpm_level: evt.level,
-              dfpm_category: evt.catevory,
-              dfpm_url: evt.url,
-              dfpm_raw: evt
-            }
-          );
-        } else if (evt.level == "info") {
-          dfpm_info_count += 1;
+    page.on('console', msg => {
+      if (msg._type == "log") {
+        try {
+          let evt = JSON.parse(msg._text);
+          if (evt.level == "warning" || evt.level == "danger") {
+            // capture events that DFPM flags as suspicious
+            dfpm_detections.push(
+              {
+                visit_id: visit.visit_id,
+                method: evt.method,
+                dfpm_path: evt.path,
+                dfpm_level: evt.level,
+                dfpm_category: evt.catevory,
+                dfpm_url: evt.url,
+                dfpm_raw: evt
+              }
+            );
+          } else if (evt.level == "info") {
+            dfpm_info_count += 1;
+          }
+        } catch (err) {
+
         }
-      } catch (err) {
-
       }
-    }
-  });
+    });
 
-  page.on('message', msg => {
-    if (msg._type == "log") {
-      console.log(msg._text);
-      try {
-        let evt = JSON.parse(msg._text);
-        if (evt.level == "warning" || evt.level == "danger") {
-          // capture events that DFPM flags as suspicious
-          dfpm_detections.push(
-            {
-              visit_id: visit.visit_id,
-              method: evt.method,
-              dfpm_path: evt.path,
-              dfpm_level: evt.level,
-              dfpm_category: evt.catevory,
-              dfpm_url: evt.url,
-              dfpm_raw: evt
-            }
-          );
-        } else if (evt.level == "info") {
-          dfpm_info_count += 1;
+    page.on('message', msg => {
+      if (msg._type == "log") {
+        console.log(msg._text);
+        try {
+          let evt = JSON.parse(msg._text);
+          if (evt.level == "warning" || evt.level == "danger") {
+            // capture events that DFPM flags as suspicious
+            dfpm_detections.push(
+              {
+                visit_id: visit.visit_id,
+                method: evt.method,
+                dfpm_path: evt.path,
+                dfpm_level: evt.level,
+                dfpm_category: evt.catevory,
+                dfpm_url: evt.url,
+                dfpm_raw: evt
+              }
+            );
+          } else if (evt.level == "info") {
+            dfpm_info_count += 1;
+          }
+        } catch (err) {
+          console.error(err);
         }
-      } catch (err) {
-        console.error(err);
       }
-    }
-  });
+    });
 
 
-  const response = await page.goto(
-    visit.query, 
-    {
-      waitUntil: "networkidle0",
-      referrer: "https://www.bing.com"
-    }
-  );
+    const response = await page.goto(
+      visit.query, 
+      {
+        waitUntil: "networkidle0",
+        referrer: "https://www.bing.com"
+      }
+    );
 
-  let d_path = date_folder(moment(visit.time));
-  let d_dir = data_dir(d_path, visit.visit_id);
+    let d_path = date_folder(moment(visit.time));
+    let d_dir = data_dir(d_path, visit.visit_id);
 
-  let outfiles = fs.createWriteStream(path.join(d_dir, "files.tar.gz"));
-  var archive = archiver("tar", {
-    gzip: true,
-    gzipOptions: {
-      level: 6
-    }
-  });
+    let outfiles = fs.createWriteStream(path.join(d_dir, "files.tar.gz"));
+    var archive = archiver("tar", {
+      gzip: true,
+      gzipOptions: {
+        level: 6
+      }
+    });
 
-  outfiles.on("close", function() {
-    console.log(`${archive.pointer()} total bytes written to archive for visit ${visit.visit_id}`);
-  });
+    outfiles.on("close", function() {
+      console.log(`${archive.pointer()} total bytes written to archive for visit ${visit.visit_id}`);
+    });
 
-  archive.on("error", function(err) {
-    throw err;
-  });
+    archive.on("error", function(err) {
+      throw err;
+    });
 
-  archive.pipe(outfiles);
+    archive.pipe(outfiles);
 
-  result.forEach((r, idx) => {
-    // tag file IDs into the output
-    r.file_id = idx;
+    result.forEach((r, idx) => {
+      // tag file IDs into the output
+      r.file_id = idx;
 
-    if (r.response_body === undefined || r.response_body === null) {
-      r.response_body = '';
-    }
-    archive.append(r.response_body, {name: `${idx}`});
-  });
+      if (r.response_body === undefined || r.response_body === null) {
+        r.response_body = '';
+      }
+      archive.append(r.response_body, {name: `${idx}`});
+    });
 
-  archive.finalize();
+    archive.finalize();
 
-  let imagedir = images_folder(moment(visit.time));
+    let imagedir = images_folder(moment(visit.time));
 
-  let screenshot_file_path = path.join(imagedir, `${visit.visit_id}.png`);
-  let screenshot_window_path = path.join(imagedir, `${visit.visit_id}_thumb.png`);
-  let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
+    let screenshot_file_path = path.join(imagedir, `${visit.visit_id}.png`);
+    let screenshot_window_path = path.join(imagedir, `${visit.visit_id}_thumb.png`);
+    let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
 
-  // generate window view and convert it to thumbnail
-  await page.screenshot({path: screenshot_window_path});
-  gm(screenshot_window_path)
-  .resize(null, 250)
-  .write(screenshot_window_path, function(err) {
-    if (err) {
-      console.error(`Failed to write thumbnail for ${visit.visit_id}: ${err.message}`);
-    }
-  });
-  
-  // generate screenshot of entire page
-  await page.screenshot({path: screenshot_file_path, fullPage: true});
+    // generate window view and convert it to thumbnail
+    await page.screenshot({path: screenshot_window_path});
+    gm(screenshot_window_path)
+    .resize(null, 250)
+    .write(screenshot_window_path, function(err) {
+      if (err) {
+        console.error(`Failed to write thumbnail for ${visit.visit_id}: ${err.message}`);
+      }
+    });
 
-  // allow time before exiting browser process for fingerprint detection to generate results
-  await dfpm.sleep(10*1000);
-  await browser.close();
+    // generate screenshot of entire page
+    await page.screenshot({path: screenshot_file_path, fullPage: true});
 
-  await db.mark_complete(visit.visit_id);
-  console.log(`DFPM logged ${dfpm_info_count} info level events for visit ${visit.visit_id}`);
+    // allow time before exiting browser process for fingerprint detection to generate results
+    await dfpm.sleep(10*1000);
+    await page.close();
 
-  return [result, dfpm_detections, screenshot_uri_path];
+    await db.mark_complete(visit.visit_id);
+    console.log(`DFPM logged ${dfpm_info_count} info level events for visit ${visit.visit_id}`);
+
+    return [result, dfpm_detections, screenshot_uri_path];
+  } catch (err) {
+    // make sure the browser is always closed even if stuff breaks - otherwise leaves hung puppeteer threads indefinitely
+    await page.close();
+    throw(err);
+  }
 }
 
 
@@ -252,10 +266,13 @@ let Visit = async function(visit) {
   }
 }
 
-let VisitCreate = async function(target_id) {    
+let VisitCreate = async function(target_id, devname) {    
+  // get settings from devname
+  let settings = GetDeviceSettings(devname);
+
   let submittime = moment();
 
-  let visit = await db.add_visit(target_id, submittime);
+  let visit = await db.add_visit(target_id, submittime, settings);
 
   return visit;
 }
@@ -278,6 +295,17 @@ let VisitRun = async function(visit_id) {
       return visit;
     }
   });
+}
+
+let GetDeviceSettings = function(devname) {
+  console.log(devname);
+  if (devname == "default" || devname == null || typeof(devname) == "undefined") {
+    return periscopeDefaultDevice;
+  } else if (typeof(devname) == "string") {
+    return puppeteer.devices[devname];
+  } else {
+    throw({message: "not a valid device"});
+  }
 }
 
 let date_folder = function(m) {
@@ -346,6 +374,14 @@ let stitch_results = function(reqs, responses) {
 }
 
 module.exports = {
+  DeviceOptions: function() {
+    let keys = Object.keys(puppeteer.devices);
+    keys.push("default");
+    return keys;
+  },
+  DeviceSettings: function(devname) {
+    return GetDeviceSettings(devname);
+  },
   ExtractSavedFile: async function(visit_id, file_id) {
     // unarchive a specific requested file so that it can be downloaded
     let visits = await db.get_visit(visit_id);
@@ -383,9 +419,9 @@ module.exports = {
       fulfill({path: zippath, name: `visit_${visit.visit_id}_files.tar.gz`});
     });
   },
-  VisitCreateNew: async function (target_id) {
+  VisitCreateNew: async function (target_id, devname) {
     // for an exisitng target, visit again
-    return VisitCreate(target_id)
+    return VisitCreate(target_id, devname)
     .then((visit) => {
       visit = VisitRun(visit[0].visit_id)
       return visit;
@@ -409,7 +445,7 @@ module.exports = {
     // needs improvement. lots of improvement.
     return Promise.all([db.search_requests(searchstring), db.search_responses(searchstring)]);
   },
-  TargetAdd: async function(submitted_url) {
+  TargetAdd: async function(submitted_url, devname) {
     let parsed = url.parse(submitted_url);
     if (parsed.protocol && ["http:", "https:", "data:"].indexOf(parsed.protocol) < 0) {
         throw "Invalid protocol";
@@ -424,7 +460,7 @@ module.exports = {
       target = target[0];
     }
 
-    let visit = await VisitCreate(target.target_id);
+    let visit = await VisitCreate(target.target_id, devname);
 
     if (!visit) {
       throw "Creation of visit entry failed";
