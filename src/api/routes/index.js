@@ -3,10 +3,7 @@ var router = express.Router();
 var manager = require("../lib/manager");
 const fs = require("fs");
 
-/* GET home page. */
-router.get("/", function(req, res, next) {
-  res.render("index", { title: "Express" });
-});
+// no index router - Vue is used
 
 router.get("/targets", function(req, res, next) {
   let page = req.query.page ? parseInt(req.query.page) : 1;

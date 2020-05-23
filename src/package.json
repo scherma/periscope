@@ -5,6 +5,7 @@
   "main": "index.js",
   "dependencies": {
     "archiver": "^3.1.1",
+    "bootstrap-vue": "^2.15.0",
     "cookie-parser": "^1.4.5",
     "express": "^4.17.1",
     "express-generator": "^4.16.1",

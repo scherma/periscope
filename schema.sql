@@ -19,7 +19,8 @@ CREATE TABLE requests (
     visit_id integer,
     request_time timestamp with time zone,
     request_post_data text,
-    request_url text
+    request_url text,
+    request_method text,
     );
 
 CREATE TABLE request_headers (
@@ -35,7 +36,8 @@ CREATE TABLE responses (
     visit_id integer,
     file_id integer,
     response_time timestamp with time zone,
-    response_size integer
+    response_size integer,
+    response_code integer,
     );
 
 CREATE TABLE response_headers (

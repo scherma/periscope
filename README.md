@@ -8,6 +8,13 @@ Working with CentOS 8:
 - Run `install.sh` as root
 - Supply a database password and account name of the user __Periscope__ will be running as
 
+# Sample output
+
+![Sandbox results example](screenshots/periscope.png?raw=true "Results page")
+![Detailed header output](screenshots/periscope-header.png "HTTP headers detail")
+![Responsive design](screenshots/periscope-responsive.png "Responsive, mobile-friendly design")
+![List of sandboxed sites](screenshots/periscope-visits.png "Easily triage websites")
+
 # Periscope API reference
 
 ## Add a new target to be examined
@@ -112,7 +119,10 @@ Returns list of _visit_ objects:
         query: "https://www.google.com",
         time_actioned: "2020-01-03T23:17:36.959Z",
         completed: true,
-        screenshot_path: "/usr/local/unsafehex/periscope/api/public/images/20200103/1/screenshot.jpg"
+        screenshot_path: "/usr/local/unsafehex/periscope/api/public/images/20200103/1/screenshot.jpg",
+        settings: {
+            /* object describing the parameters used in the visit; corresponds to a puppeteer device profile */
+        }
     },
     results: {
         requests: {
@@ -144,6 +154,18 @@ Returns list of _visit_ objects:
             },
             2: {...}
         }
+    },
+    fingerprinting: {
+        0: {
+            dfpm_id: 3,
+            visit_id: 1,
+            method: 'apply',
+            dfpm_path: 'self.CanvasRenderingContext2D.prototype.fillText',
+            dfpm_level: 'warning',
+            dfpm_category: 'canvas',
+            dfpm_url: 'https://www.google.com'
+        },
+        1: {...}
     }
  }
  ```

@@ -9,7 +9,7 @@ function getPuppet() {
         return puppeteerPromise;
     }
 
-    puppeteerPromise = puppeteer.launch({args: ["--ignoreHTTPSErrors", "--remote-debugging-port=9222"]})
+    puppeteerPromise = puppeteer.launch({args: ["--ignoreHTTPSErrors", "--ignore-certificate-errors", "--remote-debugging-port=9222"]})
     .then((browser) => {            
         dfpm.flipTheSwitch("127.0.0.1", 9222, true, false).then(() => {    
             // allow time for it to load

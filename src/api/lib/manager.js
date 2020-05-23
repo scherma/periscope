@@ -10,6 +10,9 @@ const { exec } = require("child_process");
 const stager = require("./stager");
 const dfpm = require("./DFPM/dfpm.js");
 
+// allows certificate errors to be automatically be accepted
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 const periscopeDefaultDevice = {
   viewport: {
     width: 1903, 
@@ -22,6 +25,76 @@ const periscopeDefaultDevice = {
   userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36"
 }
 
+let response_add_data = function(request_time, request, response, result) {
+  let request_url = request.url();
+  let request_method = request.method();
+  let request_headers = [];
+  let request_post_data = '';
+  let response_headers = [];
+  let response_size = null;
+  let response_body = null;
+  let response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
+  let response_code = null;
+
+  try {
+    request_headers = request.headers();
+  } catch (err) {
+    console.error("Unable to add request headers");
+    console.error(err.message);
+  }
+
+  try {
+    request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
+  } catch (err) {
+    console.error("Unable to add POST data");
+    console.error(err.message);
+  }
+
+  try {
+    response_code = response.statusCode;
+  } catch (err) {
+    console.error("Unable to add response code");
+    console.error(err.message);
+  }
+
+  try {
+    response_headers = response.headers;
+  } catch (err) {
+    console.error("Unable to add response headers");
+    console.error(err.message);
+  }
+
+  try {
+    response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
+  } catch (err) {
+    console.error("Unable to add response size");
+    console.error(err.message);
+  }
+
+  try {
+    response_body = response.body;
+  } catch (err) {
+    console.error("Unable to add response body");
+    console.error(err.message);
+  }
+
+  response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
+
+  result.push({
+    request_url,
+    request_method,
+    request_headers,
+    request_post_data,
+    request_time,
+    response_code,
+    response_headers,
+    response_size,
+    response_body,
+    response_time,
+    file_id: null
+  });
+}
+
 let VisitTarget = async function(visit) {
   const browser = await stager.getPuppet();
   const page = await browser.newPage();
@@ -29,8 +102,6 @@ let VisitTarget = async function(visit) {
   try {
     // simulate the options chosen (defaults to a desktop-like defined by periscopeDefaultDevice)
     page.emulate(visit.settings);
-    //page.setViewport({width: 1903, height: 1064, deviceScaleFactor: 1, isLandscape: true});
-    //page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36");
 
     const result = [];
     const dfpm_detections = [];
@@ -45,47 +116,81 @@ let VisitTarget = async function(visit) {
       request_client({
         uri: request.url(),
         resolveWithFullResponse: true,
+        simple: false,
+        rejectUnauthorized: false,
+        strictSSL: false,
+        insecure: true,
+        
       }).then(response => {
-        const request_url = request.url();
-        const request_headers = request.headers();
-        const request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
-        const response_headers = response.headers;
-        const response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
-        const response_body = response.body;
-        const response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
-
-        result.push({
-          request_url,
-          request_headers,
-          request_post_data,
-          request_time,
-          response_headers,
-          response_size,
-          response_body,
-          response_time,
-          file_id: null
-        });
+        response_add_data(request_time, request, response, result);
 
         request.continue();
       }).catch(error => {
+        console.error("Hit catch for request client");
         console.error(error.message);
-        request.abort();
-        result.push({
+
+        let result_obj = {
           request_url: request.url(),
+          request_method: request.method(),
           request_time: request_time,
           request_post_data: '',
-          request_headers: null,
-          response_headers: null,
+          request_headers: [],
+          response_code: null,
+          response_headers: [],
           response_size: null,
           response_body: null,
           response_time: null,
           file_id: null
-        });
+        }
+
+        try {
+          result_obj.request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
+        } catch (err) {
+          console.error("Unable to add POST data");
+          console.error(err.message);
+        }
+
+        try {
+          result_obj.response_code = response.statusCode;
+        } catch (err) {
+          console.error("Unable to add response code");
+          console.error(err.message);
+        }
+
+        try {
+          result_obj.response_headers = response.headers;
+        } catch (err) {
+          console.error("Unable to add response headers");
+          console.error(err.message);
+        }
+
+        try {
+          result_obj.response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
+        } catch (err) {
+          console.error("Unable to add response size");
+          console.error(err.message);
+        }
+
+        try {
+          result_obj.response_body = response.body;
+        } catch (err) {
+          console.error("Unable to add response body");
+          console.error(err.message);
+        }
+
+        result_obj.response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
+
+        console.error("Aborting request");
+        request.abort();
+
+        result.push(result_obj);
       });
     });
 
     page.on('console', msg => {
       if (msg._type == "log") {
+        // some messages are not DFPM detections - don't want to break if we get any
+        // but still output to error log in case of something useful
         try {
           let evt = JSON.parse(msg._text);
           if (evt.level == "warning" || evt.level == "danger") {
@@ -105,12 +210,14 @@ let VisitTarget = async function(visit) {
             dfpm_info_count += 1;
           }
         } catch (err) {
-
+          console.error("Error in page.on('console')");
+          console.error(msg._text);
+          console.error(err.message);
         }
       }
     });
 
-    page.on('message', msg => {
+    /*page.on('message', msg => {
       if (msg._type == "log") {
         console.log(msg._text);
         try {
@@ -123,7 +230,7 @@ let VisitTarget = async function(visit) {
                 method: evt.method,
                 dfpm_path: evt.path,
                 dfpm_level: evt.level,
-                dfpm_category: evt.catevory,
+                dfpm_category: evt.category,
                 dfpm_url: evt.url,
                 dfpm_raw: evt
               }
@@ -132,10 +239,11 @@ let VisitTarget = async function(visit) {
             dfpm_info_count += 1;
           }
         } catch (err) {
+          console.error("Error in page.on('message')");
           console.error(err);
         }
       }
-    });
+    });*/
 
 
     const response = await page.goto(
@@ -261,13 +369,14 @@ let Visit = async function(visit) {
 
     return action_time;
   } catch(err) {
+    console.error("Error in function Visit");
     console.error(err.message);
     throw(err);
   }
 }
 
 let VisitCreate = async function(target_id, devname) {    
-  // get settings from devname
+  // load Puppeteer device template based on device name
   let settings = GetDeviceSettings(devname);
 
   let submittime = moment();
@@ -298,7 +407,6 @@ let VisitRun = async function(visit_id) {
 }
 
 let GetDeviceSettings = function(devname) {
-  console.log(devname);
   if (devname == "default" || devname == null || typeof(devname) == "undefined") {
     return periscopeDefaultDevice;
   } else if (typeof(devname) == "string") {
@@ -337,21 +445,24 @@ let stitch_results = function(reqs, responses) {
     requests: {}
   };
 
+  // iterate through all the requests; in each iteration, create an object containing both
+  // request headers and their related responses, linked by the request_id
   reqs.forEach((req_header) => {
     if (req_header.request_id in data.requests) {
       // if we have already initialised the object for this request, just add the header to it
       // headers are stored as an array because HTTP allows for repeat/duplicate headers
       data.requests[req_header.request_id].request_headers.push({[req_header.header_name]: req_header.header_value});
     } else {
-
       data.requests[req_header.request_id] = {
         request_time: req_header.request_time,
         request_url: req_header.request_url,
+        request_method: req_header.request_method,
         request_post_data: req_header.request_post_data,
         request_headers: [{[req_header.header_name]: req_header.header_value}],
         file_id: null,
         response_time: null,
         response_size: null,
+        response_code: null,
         response_headers: []
       };
     }
@@ -363,8 +474,10 @@ let stitch_results = function(reqs, responses) {
       data.requests[resp_header.request_id].response_time = resp_header.response_time;
       data.requests[resp_header.request_id].file_id = typeof(resp_header.file_id) == "undefined" ? null : resp_header.file_id;
       data.requests[resp_header.request_id].response_size = resp_header.response_size;
+      data.requests[resp_header.request_id].response_code = resp_header.response_code;
     }
     
+    // again, repeat headers are a possibility
     if (resp_header.header_name) {
       data.requests[resp_header.request_id].response_headers.push({[resp_header.header_name]: resp_header.header_value});  
     }
@@ -375,6 +488,8 @@ let stitch_results = function(reqs, responses) {
 
 module.exports = {
   DeviceOptions: function() {
+    // puppeteer.devices is an object with device names as keys, and the settings as their values
+    // we only need the keys to present to users as options
     let keys = Object.keys(puppeteer.devices);
     keys.push("default");
     return keys;
@@ -383,24 +498,35 @@ module.exports = {
     return GetDeviceSettings(devname);
   },
   ExtractSavedFile: async function(visit_id, file_id) {
-    // unarchive a specific requested file so that it can be downloaded
+    // unarchive a specific requested file so that it can be downloaded; we need to load the info from the visit_id 
+    // in order to locate the folder results have been stored in (folder is based on date of visit occurrence)
     let visits = await db.get_visit(visit_id);
     let visit = visits[0];
     return new Promise((fulfill, reject) => {
       let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
       let zippath = path.join(d_dir, "files.tar.gz");
       let tmpdir = "/tmp/periscope";
+      let tmpvisitdir = `/tmp/periscope/${visit_id}`;
         
+      // use a folder in /tmp - file should be cleaned up after download but this will make sure it doesn't persist forever
       if (!fs.existsSync(tmpdir)) {
         fs.mkdirSync(tmpdir);
       }
-      exec(`tar zxf ${zippath} -C ${tmpdir} ${file_id}`, (err, stdout, stderr) => {
+
+      // make a directory specific to this visit - unlikely that two users would be downloading the same file ID from different
+      // visits simultaneously but better safe than sorry
+      if (!fs.existsSync(tmpvisitdir)) {
+        fs.mkdirSync(tmpvisitdir);
+      }
+
+      exec(`tar zxf ${zippath} -C ${tmpvisitdir} ${file_id}`, (err, stdout, stderr) => {
         if (err) {
-          console.error(err);
-          throw err;
+          console.error(`Problem extracting object ${file_id} from archive ${zippath}`);
+          console.error(err.message);
+          reject(err.message);
         } else {    
           let details = {
-            path: path.join(tmpdir, `${file_id}`),
+            path: path.join(tmpvisitdir, `${file_id}`),
             name: `${visit.visit_id}_${file_id}`
           }
 
@@ -410,7 +536,8 @@ module.exports = {
     });
   },
   FilesArchive: async function(visit_id) {
-    // get path for archive for a visit
+    // get path for archive for a visit; we need to load the info from the visit_id 
+    // in order to locate the folder results have been stored in (folder is based on date of visit occurrence)
     let visits = await db.get_visit(visit_id);
     let visit = visits[0];
     return new Promise((fulfill, reject) => {
@@ -420,7 +547,7 @@ module.exports = {
     });
   },
   VisitCreateNew: async function (target_id, devname) {
-    // for an exisitng target, visit again
+    // for an exisitng target, visit again (by default this uses the original device settings)
     return VisitCreate(target_id, devname)
     .then((visit) => {
       visit = VisitRun(visit[0].visit_id)

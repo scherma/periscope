@@ -1,0 +1,61 @@
+$theme-colors: (
+  "primary": #006c3c,
+  "secondary": #b7c2c2,
+  "danger": #f93322,
+  "warning": #f09c20,
+  "gray": #e1e7e7,
+  "white": #F9FAF8
+);
+
+@import "node_modules/bootstrap/scss/bootstrap";
+
+body {
+  padding: 0;
+  background-color: var(--gray);
+}
+
+.app {
+  padding: 0;
+}
+
+.main-content {
+  padding: 50px;
+}
+
+.longdata {
+  word-wrap: break-word;
+}
+
+#screenshot div.modal-dialog {
+  width: 95%;
+  max-width: 95%;
+}
+
+.thumbnail {
+  max-width: 100%;
+  margin: auto;
+  border: 1px solid #dee2e6;
+  border-radius: .25rem;
+  background-color: #fff;
+  background-clip: border-box;
+}
+
+.main-nav-wrap.container-fluid {
+  padding-left: 50px;
+  padding-right: 50px;
+}
+
+@media (max-width: 991px) {
+  .main-content {
+    padding: 0;
+  }
+
+  .main-nav-wrap.container-fluid {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  nav.navbar.main-nav {
+    margin-bottom: 2rem;
+  }
+}
