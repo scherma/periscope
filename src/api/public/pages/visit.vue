@@ -15,9 +15,9 @@
             <b-row>
               <b-col lg="2" class="font-weight-bold">Query</b-col><b-col lg="10" class="longdata">{{ visitData.visit.query }}</b-col>
             </b-row>
-            <div class="row">
+            <b-row>
               <b-col lg="2" class="font-weight-bold">Target ID</b-col><b-col lg="10">{{ visitData.visit.target_id }}</b-col>
-            </div>
+            </b-row>
             <b-row>
               <b-col lg="2" class="font-weight-bold">Visit ID</b-col><b-col lg="10">{{ visitData.visit.visit_id }}</b-col>
             </b-row>

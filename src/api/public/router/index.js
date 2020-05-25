@@ -19,6 +19,10 @@ const router = new VueRouter({
     {
       path: '/targets/:id',
       component: httpVueLoader('/pages/target-visits.vue')
+    },
+    {
+      path: '/search',
+      component: httpVueLoader('/pages/search.vue')
     }
   ]
 });

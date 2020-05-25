@@ -113,12 +113,21 @@ module.exports = {
   mark_complete: function(visit_id) {
     return pg("visits").update({completed: true}).where({visit_id: visit_id});
   },
-  search_requests: function(searchterm, perPage=20, currentPage=1) {
-    return pg("request_headers").select("*").leftJoin("requests", "request_headers.request_id", "requests.request_id").leftJoin("visits", "requests.visit_id", "visits.visit_id")
-    .whereRaw("to_tsvector('English', header_value) @@ to_tsquery('English', ?)", [searchterm]).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
-  },
-  search_responses: function(searchterm, perPage=20, currentPage=1) {
-    return pg("response_headers").select("*").leftJoin("responses", "response_headers.response_id", "responses.response_id").leftJoin("visits", "responses.visit_id", "visits.visit_id")
-    .whereRaw("to_tsvector('English', header_value) @@ to_tsquery('English', ?)", [searchterm]).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+  search_requests_and_responses: function(searchterm, perPage=20, currentPage=1) {
+    return pg.select("*").from(pg.raw("(SELECT visits.*, targets.*, rq.request_url, rq.request_id, rqh.header_id, rqh.header_name, rqh.header_value, 'request' etype \
+      FROM request_headers rqh \
+      LEFT JOIN requests rq ON rq.request_id = rqh.request_id LEFT JOIN visits ON visits.visit_id = rq.visit_id \
+      LEFT JOIN targets ON targets.target_id = visits.target_id \
+      WHERE to_tsvector('English', rqh.header_value) @@ to_tsquery('English', ?) \
+      OR to_tsvector('English', rqh.header_name) @@ to_tsquery('English', ?)) rqt \
+    UNION SELECT * FROM \
+    (SELECT visits.*, targets.*, rq.request_url, rsp.request_id, rsph.header_id, rsph.header_name, rsph.header_value, 'response' etype \
+      FROM response_headers rsph \
+      LEFT JOIN responses rsp ON rsp.response_id = rsph.response_id LEFT JOIN visits ON visits.visit_id = rsp.visit_id \
+      LEFT JOIN requests rq ON rsp.request_id = rq.request_id \
+      LEFT JOIN targets ON targets.target_id = visits.target_id \
+      WHERE to_tsvector('English', rsph.header_value) @@ to_tsquery('English', ?) \
+      OR to_tsvector('English', rsph.header_name) @@ to_tsquery('English', ?)) rspt", [searchterm, searchterm, searchterm, searchterm]))
+      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
   }
 }

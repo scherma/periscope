@@ -183,12 +183,10 @@ router.get("/deviceoptions", function(req, res, next) {
 });
 
 router.get("/search", function (req, res, next) {
-  manager.RequestSearch(req.query.q)
-  .then(([requests, responses]) => {
-    let results = {
-      requests: requests,
-      responses, responses
-    }
+  let page = typeof(parseInt(req.query.page)) == "number" ? parseInt(req.query.page) : 1;
+  let pagesize = typeof(parseInt(req.query.pagesize)) == "number" ? parseInt(req.query.pagesize) : 20;
+  manager.RequestSearch(req.query.q, perPage=pagesize, currentPage=page)
+  .then((results) => {
     res.send(results);
   })
   .catch((err) => {

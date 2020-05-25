@@ -486,6 +486,21 @@ let stitch_results = function(reqs, responses) {
   return data;
 }
 
+let build_search_results = function([requests, responses]) {
+  let results = [];
+  requests.forEach((request) => {
+    request.type = "request";
+    results.push(request);
+  });
+
+  responses.forEach((response) => {
+    response.type = "response"; 
+    results.push(response);
+  });
+
+  return results;
+}
+
 module.exports = {
   DeviceOptions: function() {
     // puppeteer.devices is an object with device names as keys, and the settings as their values
@@ -568,9 +583,9 @@ module.exports = {
     let visits = await db.get_visit(visit_id);
     return { visit: visits[0], results: results, fingerprinting: dfpm_detections }
   },
-  RequestSearch: async function(searchstring) {
+  RequestSearch: async function(searchstring, perPage=20, currentPage=1) {
     // needs improvement. lots of improvement.
-    return Promise.all([db.search_requests(searchstring), db.search_responses(searchstring)]);
+    return db.search_requests_and_responses(searchstring, perPage, currentPage);
   },
   TargetAdd: async function(submitted_url, devname) {
     let parsed = url.parse(submitted_url);
