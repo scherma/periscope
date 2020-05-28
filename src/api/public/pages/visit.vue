@@ -22,10 +22,10 @@
               <b-col lg="2" class="font-weight-bold">Visit ID</b-col><b-col lg="10">{{ visitData.visit.visit_id }}</b-col>
             </b-row>
             <b-row>
-              <b-col lg="2" class="font-weight-bold">Creation Time</b-col><b-col lg="10">{{ visitData.visit.createtime }}</b-col>
+              <b-col lg="2" class="font-weight-bold">Creation time</b-col><b-col lg="10">{{ visitData.visit.createtime }}</b-col>
             </b-row>
             <b-row>
-              <b-col sm="2" class="font-weight-bold">Action Time</b-col><b-col lg="10">{{ visitData.visit.time_actioned }}</b-col>  
+              <b-col sm="2" class="font-weight-bold">Processed at</b-col><b-col lg="10">{{ visitData.visit.time_actioned }}</b-col>  
             </b-row>
             <b-row>
               <b-col lg="2" class="font-weight-bold">Complete?</b-col><b-col lg="10">{{ visitData.visit.completed }}</b-col>
@@ -65,9 +65,27 @@
     <b-row class="visit-fingerprint" v-if="visitData.fingerprinting">
       <b-col>
         <b-row v-for="fingerprint in visitData.fingerprinting" :key="fingerprint.dfpm_id">
-          <b-alert show :variant="fingerprint.dfpm_level" class="w-100 mb-2">
-            <b-col cols="12" class="longdata"><strong>{{fingerprint.dfpm_category}} fingerprinting detected!</strong> - {{fingerprint.dfpm_path}}</b-col>
-            <b-col cols="12" class="longdata">{{fingerprint.dfpm_url}}</b-col>
+          <b-alert show :variant="fingerprint.dfpm_level" class="alert-lowpad">
+            <b-row v-b-toggle="'fp-collapse-' + fingerprint.dfpm_id">
+              <b-col>
+                <b-row>
+                  <b-col cols="12" class="longdata"><strong>{{fingerprint.dfpm_category}} fingerprinting detected!</strong> - {{fingerprint.dfpm_path}}</b-col>
+                  <b-col cols="12" class="longdata">{{fingerprint.dfpm_url}}</b-col>
+                </b-row>
+              </b-col>
+            </b-row>
+            <b-collapse :id="'fp-collapse-' + fingerprint.dfpm_id">
+              <b-row class="mt-2">
+                <b-col cols="12">
+                  <b-row>
+                    <b-col><strong>Stack trace</strong></b-col>
+                  </b-row>
+                  <b-row v-for="stackitem in fingerprint.dfpm_raw.stack" :key="stackitem">
+                    <b-col>{{stackitem.fileName}} line {{stackitem.lineNumber}} col {{stackitem.columnNumber}}</b-col>
+                  </b-row>
+                </b-col>
+              </b-row>
+            </b-collapse>
           </b-alert>
         </b-row>
       </b-col>
@@ -180,6 +198,11 @@ li.nav-item.visit-nav-item-left a.nav-link {
 
 li.nav-item.visit-nav-item-right a.nav-link {
   padding-right: 0;
+}
+
+div.alert.alert-lowpad {
+  width: 100%;
+  margin-bottom: 0.5rem;
 }
 
 @media (max-width: 767px) {

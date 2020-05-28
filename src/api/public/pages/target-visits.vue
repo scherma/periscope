@@ -10,7 +10,12 @@
   <b-container fluid>
     <b-row class="visit-row" v-for="visit in visits" :key="visit.visit_id">
       <b-col class="longdata mt-2 mb-2" lg="6">
-        <router-link :to="'/visit/' + visit.visit_id">{{visit.query}}</router-link>
+        <b-row>
+          <b-col><router-link :to="'/visit/' + visit.visit_id">{{visit.query}}</router-link></b-col>
+        </b-row>
+        <b-row>
+          <b-col>{{visit.time_actioned}}</b-col>
+        </b-row>
       </b-col>
       <b-col class="mt-2 mb-2" lg="6">
         <div class="img-wrapper">

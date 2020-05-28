@@ -10219,6 +10219,10 @@ body {
   padding-right: 50px;
 }
 
+.alert.alert-lowpad {
+  padding: 0.75rem !important;
+}
+
 @media (max-width: 991px) {
   .main-content {
     padding: 0;
