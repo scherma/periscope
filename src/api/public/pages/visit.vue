@@ -22,10 +22,10 @@
               <b-col lg="2" class="font-weight-bold">Visit ID</b-col><b-col lg="10">{{ visitData.visit.visit_id }}</b-col>
             </b-row>
             <b-row>
-              <b-col lg="2" class="font-weight-bold">Creation time</b-col><b-col lg="10">{{ visitData.visit.createtime }}</b-col>
+              <b-col lg="2" class="font-weight-bold">Created</b-col><b-col lg="10">{{ visitData.visit.createtime }}</b-col>
             </b-row>
             <b-row>
-              <b-col sm="2" class="font-weight-bold">Processed at</b-col><b-col lg="10">{{ visitData.visit.time_actioned }}</b-col>  
+              <b-col sm="2" class="font-weight-bold">Processed</b-col><b-col lg="10">{{ visitData.visit.time_actioned }}</b-col>  
             </b-row>
             <b-row>
               <b-col lg="2" class="font-weight-bold">Complete?</b-col><b-col lg="10">{{ visitData.visit.completed }}</b-col>
@@ -48,6 +48,14 @@
                 <b-button size="sm" variant="primary" v-b-toggle.collapse-headers class="visit-nav-btn">
                   <b-icon-eye font-scale="1.5"></b-icon-eye>&nbsp; See headers</b-button>
               </b-nav-item>
+              <b-nav-item class="visit-nav-item-left" v-if="visitData.errors">
+                <b-button size="sm" variant="secondary" v-b-toggle.collapse-errors class="visit-nav-btn">
+                  <b-icon icon="exclamation-triangle" font-scale="1.5"></b-icon>&nbsp; See errors</b-button>
+              </b-nav-item>
+              <b-nav-item class="visit-nav-item-left" v-if="visitData.fingerprinting">
+                <b-button size="sm" variant="secondary" v-b-toggle.collapse-fingerprinting class="visit-nav-btn">
+                  <i class="mdi mdi-fingerprint"></i>&nbsp; See fingerprinting</b-button>
+              </b-nav-item>
             </b-navbar-nav>
             <b-navbar-nav class="ml-auto">
               <b-nav-item right class="visit-nav-item-right">
@@ -62,34 +70,46 @@
         </b-navbar>
       </b-col>
     </b-row>
-    <b-row class="visit-fingerprint" v-if="visitData.fingerprinting">
-      <b-col>
-        <b-row v-for="fingerprint in visitData.fingerprinting" :key="fingerprint.dfpm_id">
-          <b-alert show :variant="fingerprint.dfpm_level" class="alert-lowpad">
-            <b-row v-b-toggle="'fp-collapse-' + fingerprint.dfpm_id">
-              <b-col>
-                <b-row>
-                  <b-col cols="12" class="longdata"><strong>{{fingerprint.dfpm_category}} fingerprinting detected!</strong> - {{fingerprint.dfpm_path}}</b-col>
-                  <b-col cols="12" class="longdata">{{fingerprint.dfpm_url}}</b-col>
-                </b-row>
-              </b-col>
-            </b-row>
-            <b-collapse :id="'fp-collapse-' + fingerprint.dfpm_id">
-              <b-row class="mt-2">
-                <b-col cols="12">
+    <b-collapse id="collapse-errors" v-if="visitData.errors">
+      <b-row>
+        <b-alert show class="alert-lowpad">
+          <h5>Errors</h5>
+          <b-row v-for="error in visitData.errors" :key="error">
+            <b-col class="longdata text-monospace" >{{error}}</b-col>
+          </b-row>
+        </b-alert>
+      </b-row>
+    </b-collapse>
+    <b-collapse id="collapse-fingerprinting">
+      <b-row class="visit-fingerprint" v-if="visitData.fingerprinting">
+        <b-col>
+          <b-row v-for="fingerprint in visitData.fingerprinting" :key="fingerprint.dfpm_id">
+            <b-alert show :variant="fingerprint.dfpm_level" class="alert-lowpad">
+              <b-row v-b-toggle="'fp-collapse-' + fingerprint.dfpm_id">
+                <b-col>
                   <b-row>
-                    <b-col><strong>Stack trace</strong></b-col>
-                  </b-row>
-                  <b-row v-for="stackitem in fingerprint.dfpm_raw.stack" :key="stackitem">
-                    <b-col>{{stackitem.fileName}} line {{stackitem.lineNumber}} col {{stackitem.columnNumber}}</b-col>
+                    <b-col cols="12" class="longdata"><strong>{{fingerprint.dfpm_category}} fingerprinting detected!</strong> - {{fingerprint.dfpm_path}}</b-col>
+                    <b-col cols="12" class="longdata">{{fingerprint.dfpm_url}}</b-col>
                   </b-row>
                 </b-col>
               </b-row>
-            </b-collapse>
-          </b-alert>
-        </b-row>
-      </b-col>
-    </b-row>
+              <b-collapse :id="'fp-collapse-' + fingerprint.dfpm_id">
+                <b-row class="mt-2">
+                  <b-col cols="12">
+                    <b-row>
+                      <b-col><strong>Stack trace</strong></b-col>
+                    </b-row>
+                    <b-row v-for="stackitem in fingerprint.dfpm_raw.stack" :key="stackitem">
+                      <b-col>{{stackitem.fileName}} line {{stackitem.lineNumber}} col {{stackitem.columnNumber}}</b-col>
+                    </b-row>
+                  </b-col>
+                </b-row>
+              </b-collapse>
+            </b-alert>
+          </b-row>
+        </b-col>
+      </b-row>
+    </b-collapse>
     <b-row class="request-row" v-for="request in visitData.results.requests" :key="request">
       <b-col>
         <b-row class="request-row-head mb-2">
@@ -99,7 +119,8 @@
                 <span v-if="request.request_method" class="text-uppercase">{{request.request_method}}</span>
                 {{ request.request_url }}</b-col>
               <b-col lg="1" class="align-middle mt-2 mb-2">
-                <b-button variant="secondary" size="sm" class="get-file" :href="'/visits/' + visitData.visit.visit_id + '/file/' + request.file_id" right>
+                <b-button variant="secondary" size="sm" class="get-file" :aria-label='"Download file for request " + request.file_id'
+                  :href="'/visits/' + visitData.visit.visit_id + '/file/' + request.file_id" right>
                   <i class="material-icons md-18 align-text-top" style="font-size: 18px">arrow_downward</i></b-button>  
               </b-col>
             </b-row>
@@ -229,6 +250,7 @@ module.exports = {
         },
         results: []
       },
+      showErrors: false
     }
   },
   methods: {
