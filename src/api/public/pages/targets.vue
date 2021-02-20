@@ -60,7 +60,7 @@ module.exports = {
     fetchTargets: async function () {
       let data = await axios({
         method: "get",
-        url: "/targets?page=" + this.page,
+        url: `/targets?page=${this.page}`,
       });
       this.targets = data.data.data;
       this.pagination = data.data.pagination;

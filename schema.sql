@@ -38,6 +38,7 @@ CREATE TABLE responses (
     response_time timestamp with time zone,
     response_size integer,
     response_code integer,
+    response_data_length integer
     );
 
 CREATE TABLE response_headers (

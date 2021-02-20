@@ -9,6 +9,9 @@ const gm = require("gm");
 const { exec } = require("child_process");
 const stager = require("./stager");
 const dfpm = require("./DFPM/dfpm.js");
+const logger = require("./logger");
+const { isNull } = require("util");
+const prettyBytes = require("pretty-bytes");
 
 // allows certificate errors to be automatically be accepted
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -22,10 +25,11 @@ const periscopeDefaultDevice = {
     isMobile: false,
     hasTouch: false
   },
-  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36"
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.182 Safari/537.36 Edg/88.0.705.74"
 }
 
 let response_add_data = function(request_time, request, response, result, errorlog) {
+  logger.LogMessage(errorlog, `Entered response_add_data() for ${request.url()}`, logger.LOGLEVELS.DEBUG);
   let request_url = request.url();
   let request_method = request.method();
   let request_headers = [];
@@ -39,50 +43,37 @@ let response_add_data = function(request_time, request, response, result, errorl
   try {
     request_headers = request.headers();
   } catch (err) {
-    LogMessage(errorlog, `Unable to add request headers: ${err.message}`);
-
-    console.error("Unable to add request headers");
-    console.error(err.message);
+    logger.LogMessage(errorlog, `Unable to add request headers: ${err.message}`, logger.LOGLEVELS.ERROR);
   }
 
   try {
     request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
   } catch (err) {
-    LogMessage(errorlog, `Unable to add POST data: ${err.message}`);
-    console.error("Unable to add POST data");
-    console.error(err.message);
+    logger.LogMessage(errorlog, `Unable to add POST data: ${err.message}`, logger.LOGLEVELS.ERROR);
   }
 
   try {
     response_code = response.statusCode;
   } catch (err) {
-    LogMessage(errorlog, `Unable to add response code: ${err.message}`);
-    console.error("Unable to add response code");
-    console.error(err.message);
+    logger.LogMessage(errorlog, `Unable to add response code: ${err.message}`, logger.LOGLEVELS.ERROR);
   }
 
   try {
     response_headers = response.headers;
   } catch (err) {
-    LogMessage(errorlog, `Unable to add response headers: ${err.message}`);
-    console.error("Unable to add response headers");
-    console.error(err.message);
+    logger.LogMessage(errorlog, `Unable to add response headers: ${err.message}`, logger.LOGLEVELS.ERROR);
   }
 
   try {
     response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
   } catch (err) {
-    LogMessage(errorlog, `Unable to add response size: ${err.message}`);
-    console.error("Unable to add response size");
-    console.error(err.message);
+    logger.LogMessage(errorlog, `Unable to add response size: ${err.message}`, logger.LOGLEVELS.ERROR);
   }
 
   try {
     response_body = response.body;
   } catch (err) {
-    LogMessage(errorlog, `Unable to add response body: ${err.message}`);
-    console.error("Unable to add response body");
-    console.error(err.message);
+    logger.LogMessage(errorlog, `Unable to add response body: ${err.message}`, logger.LOGLEVELS.ERROR);
   }
 
   response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
@@ -100,6 +91,7 @@ let response_add_data = function(request_time, request, response, result, errorl
     response_time,
     file_id: null
   });
+  logger.LogMessage(errorlog, `Completed response_add_data() for ${request.url()}`, logger.LOGLEVELS.DEBUG);
 }
 
 let VisitTarget = async function(visit) {
@@ -109,16 +101,19 @@ let VisitTarget = async function(visit) {
   try {
     // simulate the options chosen (defaults to a desktop-like defined by periscopeDefaultDevice)
     page.emulate(visit.settings);
+    logger.LogMessage(visit.errorlog, `Settings emulated: ${JSON.stringify(visit.settings)}`, logger.LOGLEVELS.DEBUG);
 
     const result = [];
     const dfpm_detections = [];
     let dfpm_info_count = 0;
     await page.setRequestInterception(true);
+    logger.LogMessage(visit.errorlog, `Request interception set`, logger.LOGLEVELS.DEBUG);
 
 
     page.on("request", request => {
       // capture information about requests and responses
       const request_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
+      logger.LogMessage(visit.errorlog, `Entered page.on('request') for ${request.url()}`, logger.LOGLEVELS.DEBUG);
 
       request_client({
         uri: request.url(),
@@ -127,15 +122,17 @@ let VisitTarget = async function(visit) {
         rejectUnauthorized: false,
         strictSSL: false,
         insecure: true,
-        
       }).then(response => {
+        logger.LogMessage(visit.errorlog, `Entered request_client() for page ${request.url()}`, logger.LOGLEVELS.DEBUG);
+
         response_add_data(request_time, request, response, result, visit.errorlog);
 
+        
+        logger.LogMessage(visit.errorlog, `Continuing request for ${request.url()}`, logger.LOGLEVELS.DEBUG);
         request.continue();
+        logger.LogMessage(visit.errorlog, `Continued request for ${request.url()}`, logger.LOGLEVELS.DEBUG);
       }).catch(error => {
-        LogMessage(visit.errorlog, `Error in request client: ${error.message}`);
-        console.error("Hit catch for request client");
-        console.error(error.message);
+        logger.LogMessage(visit.errorlog, `Error in request client: ${error.message}`, logger.LOGLEVELS.ERROR);
 
         let result_obj = {
           request_url: request.url(),
@@ -154,58 +151,51 @@ let VisitTarget = async function(visit) {
         try {
           result_obj.request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
         } catch (err) {
-          LogMessage(visit.errorlog, `Unable to add POST data: ${err.message}`);
-          console.error("Unable to add POST data");
-          console.error(err.message);
+          logger.LogMessage(visit.errorlog, `Unable to add POST data: ${err.message}`, logger.LOGLEVELS.ERROR);
         }
 
         try {
           result_obj.response_code = response.statusCode;
         } catch (err) {
-          LogMessage(visit.errorlog, `Unable to add response code: ${err.message}`);
-          console.error("Unable to add response code");
-          console.error(err.message);
+          logger.LogMessage(visit.errorlog, `Unable to add response code: ${err.message}`, logger.LOGLEVELS.ERROR);
         }
 
         try {
           result_obj.response_headers = response.headers;
         } catch (err) {
-          LogMessage(visit.errorlog, `Unable to add response headers: ${err.message}`);
-          console.error("Unable to add response headers");
-          console.error(err.message);
+          logger.LogMessage(visit.errorlog, `Unable to add response headers: ${err.message}`, logger.LOGLEVELS.ERROR);
         }
 
         try {
           result_obj.response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
         } catch (err) {
-          LogMessage(visit.errorlog, `Unable to add response size: ${err.message}`);
-          console.error("Unable to add response size");
-          console.error(err.message);
+          logger.LogMessage(visit.errorlog, `Unable to add response size: ${err.message}`, logger.LOGLEVELS.ERROR);
         }
 
         try {
           result_obj.response_body = response.body;
         } catch (err) {
-          LogMessage(visit.errorlog, `Unable to add response body: ${err.message}`);
-          console.error("Unable to add response body");
-          console.error(err.message);
+          logger.LogMessage(visit.errorlog, `Unable to add response body: ${err.message}`, logger.LOGLEVELS.ERROR);
         }
 
         result_obj.response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
 
-        LogMessage(visit.errorlog, `Aborting request for ${request.url()}`)
-        console.error("Aborting request");
+        logger.LogMessage(visit.errorlog, `Aborting request for ${request.url()}`, logger.LOGLEVELS.ERROR);
         request.abort();
 
+        
+        logger.LogMessage(visit.errorlog, `Pushing object to results`, logger.LOGLEVELS.DEBUG);
         result.push(result_obj);
       });
     });
 
     page.on('console', msg => {
+      logger.LogMessage(visit.errorlog, `Entered page.on('console')`, logger.LOGLEVELS.DEBUG);
       if (msg._type == "log") {
         // some messages are not DFPM detections - don't want to break if we get any
         // but still output to error log in case of something useful
         try {
+          logger.LogMessage(visit.errorlog, `Parsing message JSON: ${msg._text}`, logger.LOGLEVELS.DEBUG);
           let evt = JSON.parse(msg._text);
           if (evt.level == "warning" || evt.level == "danger") {
             // capture events that DFPM flags as suspicious
@@ -224,19 +214,19 @@ let VisitTarget = async function(visit) {
             dfpm_info_count += 1;
           }
         } catch (err) {
-          LogMessage(visit.errorlog, `Error in page.on('console'): ${err.message}`);
-          console.error("Error in page.on('console')");
-          console.error(msg._text);
-          console.error(err.message);
+          logger.LogMessage(visit.errorlog, `Error in page.on('console'): ${err.message}`, logger.LOGLEVELS.ERROR);
+          logger.LogMessage(visit.errorlog, `Data: ${msg._text}`, logger.LOGLEVELS.ERROR);
         }
       }
     });
 
+    logger.LogMessage(visit.errorlog, `Going to page ${visit.query}`, logger.LOGLEVELS.INFO);
     const response = await page.goto(
       visit.query, 
       {
         waitUntil: "networkidle0",
-        referrer: "https://www.bing.com"
+        referrer: "https://www.bing.com",
+        timeout: visit.timeout ? visit.timeout : 0
       }
     );
 
@@ -252,11 +242,12 @@ let VisitTarget = async function(visit) {
     });
 
     outfiles.on("close", function() {
-      console.log(`${archive.pointer()} total bytes written to archive for visit ${visit.visit_id}`);
+      let archive_msg = `${archive.pointer()} total bytes written to archive for visit ${visit.visit_id}`;
+      logger.LogMessage(visit.errorlog, archive_msg, logger.LOGLEVELS.INFO);
     });
 
     archive.on("error", function(err) {
-      LogMessage(visit.errorlog, `Error archiving files: ${err.message}`);
+      logger.LogMessage(visit.errorlog, `Error archiving files: ${err.message}`, logger.LOGLEVELS.ERROR);
       throw err;
     });
 
@@ -269,9 +260,12 @@ let VisitTarget = async function(visit) {
       if (r.response_body === undefined || r.response_body === null) {
         r.response_body = '';
       }
+      
+      logger.LogMessage(visit.errorlog, `Appending file ${idx} to archive`, logger.LOGLEVELS.DEBUG);
       archive.append(r.response_body, {name: `${idx}`});
     });
 
+    logger.LogMessage(visit.errorlog, `Finalizing archive`, logger.LOGLEVELS.DEBUG);
     archive.finalize();
 
     let imagedir = images_folder(moment(visit.time));
@@ -281,41 +275,37 @@ let VisitTarget = async function(visit) {
     let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
 
     // generate window view and convert it to thumbnail
+    logger.LogMessage(visit.errorlog, `Generating windowed screenshot to ${screenshot_window_path}`, logger.LOGLEVELS.DEBUG);
     await page.screenshot({path: screenshot_window_path});
     gm(screenshot_window_path)
     .resize(null, 250)
     .write(screenshot_window_path, function(err) {
       if (err) {
-        LogMessage(visit.errorlog, `Failed to write thumbnail for ${visit.visit_id}: ${err.message}`);
-        console.error(`Failed to write thumbnail for ${visit.visit_id}: ${err.message}`);
+        logger.LogMessage(visit.errorlog, `Failed to write thumbnail for ${visit.visit_id}: ${err.message}`, logger.LOGLEVELS.ERROR);
       }
     });
 
     // generate screenshot of entire page
+    logger.LogMessage(visit.errorlog, `Generating screenshot to ${screenshot_file_path}`, logger.LOGLEVELS.DEBUG);
     await page.screenshot({path: screenshot_file_path, fullPage: true});
 
     // allow time before exiting browser process for fingerprint detection to generate results
+    logger.LogMessage(visit.errorlog, `Letting DFPM gather data, waiting a few secs...`, logger.LOGLEVELS.INFO);
     await dfpm.sleep(10*1000);
     await page.close();
 
+    logger.LogMessage(visit.errorlog, `Marking completed in DB`, logger.LOGLEVELS.DEBUG);
     await db.mark_complete(visit.visit_id);
-    console.log(`DFPM logged ${dfpm_info_count} info level events for visit ${visit.visit_id}`);
+    logger.LogMessage(visit.errorlog, `DFPM logged ${dfpm_info_count} info level events for visit ${visit.visit_id}`, logger.LOGLEVELS.INFO);
 
     return [result, dfpm_detections, screenshot_uri_path];
   } catch (err) {
+    logger.LogMessage(visit.errorlog, `Fatal! Error could not be handled: ${err}`, logger.LOGLEVELS.ERROR);
     // make sure the browser is always closed even if stuff breaks - otherwise leaves hung puppeteer threads indefinitely
     await page.close();
     throw(err);
   }
 }
-
-let LogMessage = async function(logfile, message) {
-  let ts = moment().format("YYYY-MM-DD HH:mm:ss");
-  message = `${ts} - ${message}`;
-  fs.appendFile(logfile, message + "\n", function (e) {
-  });
-}
-
 
 let Visit = async function(visit) {
   try {
@@ -335,36 +325,38 @@ let Visit = async function(visit) {
     }
 
     let images_dir = images_folder(moment(action_time));
-    console.log(`Images for visit ${visit.visit_id} being stored in ${images_dir}`);
+    logger.LogMessage(visit.errorlog, `Images for visit ${visit.visit_id} being stored in ${images_dir}`, logger.LOGLEVELS.INFO);
 
     if (!fs.existsSync(images_dir)) {
       fs.mkdirSync(images_dir);
     }
 
     await db.set_actioned_time(visit.visit_id, action_time);
-    console.log(`Visit ${visit.visit_id} actioned at ${action_time}`);
+    logger.LogMessage(visit.errorlog, `Visit ${visit.visit_id} actioned at ${action_time}`, logger.LOGLEVELS.INFO);
     VisitTarget(visit)
     .then(([requests, dfpm_detections, screenshot_uri_path]) => {
+      logger.LogMessage(visit.errorlog, `Adding requests to DB`, logger.LOGLEVELS.DEBUG);
       db.add_requests(requests, visit.visit_id)
       .then(([req_inserts, resp_inserts]) => {
-        console.log(`Inserted ${req_inserts} requests and ${resp_inserts} responses for visit ${visit.visit_id}`);
-        console.log(`Setting visit ${visit.visit_id} screenshot path value to ${screenshot_uri_path}`);
+        let insert_stats = `Inserted ${req_inserts} requests and ${resp_inserts} responses for visit ${visit.visit_id}`;
+        logger.LogMessage(visit.errorlog, insert_stats, logger.LOGLEVELS.INFO);
+        let set_screenshot_path = `Setting visit ${visit.visit_id} screenshot path value to ${screenshot_uri_path}`;
+        logger.LogMessage(visit.errorlog, set_screenshot_path, logger.LOGLEVELS.INFO);
         db.set_screenshot_path(screenshot_uri_path, visit.visit_id)
         .catch((err) => {
-          console.error(`Error setting screenshot path: ${err.message}`);
+          logger.LogMessage(visit.errorlog, `Error setting screenshot path: ${err.message}`, logger.LOGLEVELS.ERROR);
         });
       });
+      logger.LogMessage(visit.errorlog, "Adding DFPM detections to DB", logger.LOGLEVELS.DEBUG);
       db.add_dfpm(dfpm_detections);
     }).catch((err) => {
-      LogMessage(visit.errorlog, err.message);
-      console.error(`Encountered error processing visit ${visit.visit_id}; wrote to log`);
-      console.error(err.message);
+      logger.LogMessage(visit.errorlog, err.message, logger.LOGLEVELS.ERROR);
+      logger.LogMessage(visit.errorlog, `Encountered error processing visit ${visit.visit_id}; wrote to log`, logger.LOGLEVELS.ERROR);
     });
 
     return action_time;
   } catch(err) {
-    console.error("Error in function Visit");
-    console.error(err.message);
+    logger.LogMessage(visit.errorlog, `Fatal error in function Visit: ${err.message}`, logger.LOGLEVELS.FATAL);
     throw(err);
   }
 }
@@ -381,12 +373,16 @@ let VisitCreate = async function(target_id, devname) {
 }
 
 let VisitRun = async function(visit_id) {
+  logger.LogMessage(null, "VisitRun called", logger.LOGLEVELS.DEBUG);
   return await db.get_visit(visit_id)
   .then((visit) => {
     if (visit) {
+      logger.LogMessage(null, `Got one! ${visit_id}`, logger.LOGLEVELS.DEBUG);
       visit = visit[0];
     } else {
-      throw `No visit found with id ${visit_id}`;
+      let novisit = `No visit found with id ${visit_id}`;
+      logger.LogMessage(null, novisit, logger.LOGLEVELS.ERROR);
+      throw novisit;
     }
     if (visit.time_actioned == null) {
       return Visit(visit)
@@ -436,8 +432,15 @@ let stitch_results = function(reqs, responses) {
   // combine the database rows for requests with corresponding responses
 
   let data = {
-    requests: {}
+    requests: {},
+    summary: {
+      total_response_data: 0,
+      total_load_time: null
+    }
   };
+
+  let loadstart = null;
+  let loadend = null;
 
   // iterate through all the requests; in each iteration, create an object containing both
   // request headers and their related responses, linked by the request_id
@@ -460,6 +463,10 @@ let stitch_results = function(reqs, responses) {
         response_headers: []
       };
     }
+
+    if (moment(req_header.request_time) < loadstart || !loadstart) {
+      loadstart = moment(req_header.request_time);
+    }
   });
 
   responses.forEach((resp_header) => {
@@ -469,13 +476,23 @@ let stitch_results = function(reqs, responses) {
       data.requests[resp_header.request_id].file_id = typeof(resp_header.file_id) == "undefined" ? null : resp_header.file_id;
       data.requests[resp_header.request_id].response_size = resp_header.response_size;
       data.requests[resp_header.request_id].response_code = resp_header.response_code;
+
+      data.summary.total_response_data = data.summary.total_response_data + resp_header.response_data_length;
     }
     
     // again, repeat headers are a possibility
     if (resp_header.header_name) {
       data.requests[resp_header.request_id].response_headers.push({[resp_header.header_name]: resp_header.header_value});  
     }
+
+    if (moment(resp_header.response_time) > loadend || !loadend) {
+      loadend = moment(resp_header.response_time);
+    }
   });
+
+  data.summary.total_response_data = prettyBytes(data.summary.total_response_data);
+
+  data.summary.total_load_time = (loadend-loadstart)/1000;
 
   return data;
 }
@@ -507,6 +524,7 @@ module.exports = {
     return GetDeviceSettings(devname);
   },
   ExtractSavedFile: async function(visit_id, file_id) {
+    logger.LogMessage(null, "ExtractSavedFile called", logger.LOGLEVELS.DEBUG);
     // unarchive a specific requested file so that it can be downloaded; we need to load the info from the visit_id 
     // in order to locate the folder results have been stored in (folder is based on date of visit occurrence)
     let visits = await db.get_visit(visit_id);
@@ -530,21 +548,26 @@ module.exports = {
 
       exec(`tar zxf ${zippath} -C ${tmpvisitdir} ${file_id}`, (err, stdout, stderr) => {
         if (err) {
-          console.error(`Problem extracting object ${file_id} from archive ${zippath}`);
-          console.error(err.message);
+          let errmsg = `Problem extracting object ${file_id} from archive ${zippath}`;
+          logger.LogMessage(null, errmsg, logger.LOGLEVELS.ERROR);
+          logger.LogMessage(null, err.message, logger.LOGLEVELS.ERROR);
           reject(err.message);
         } else {    
           let details = {
             path: path.join(tmpvisitdir, `${file_id}`),
             name: `${visit.visit_id}_${file_id}`
           }
-
+          
+          let detailstr = JSON.stringify(details);
+          
+          logger.LogMessage(null, `Returning data: ${detailstr}`, logger.LOGLEVELS.DEBUG);
           fulfill(details);
         }
       });
     });
   },
   FilesArchive: async function(visit_id) {
+    logger.LogMessage(null, "FilesArchive called", logger.LOGLEVELS.DEBUG);
     // get path for archive for a visit; we need to load the info from the visit_id 
     // in order to locate the folder results have been stored in (folder is based on date of visit occurrence)
     let visits = await db.get_visit(visit_id);
@@ -556,6 +579,7 @@ module.exports = {
     });
   },
   VisitCreateNew: async function (target_id, devname) {
+    logger.LogMessage(null, "VisitCreateNew called", logger.LOGLEVELS.DEBUG);
     // for an exisitng target, visit again (by default this uses the original device settings)
     return VisitCreate(target_id, devname)
     .then((visit) => {
@@ -585,35 +609,27 @@ module.exports = {
       .then((visitrows) => {
         let visit = visitrows[0];
         let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
-        let errorlog = path.join(d_dir, "error.log");
-        let errors = null; 
+        let logpath = path.join(d_dir, "error.log");
+        let logdata = null; 
         
-        if (fs.existsSync(errorlog)) {
-          errors = fs.readFileSync(errorlog, 'utf-8').split('\n');
+        if (fs.existsSync(logpath)) {
+          logdata = fs.readFileSync(logpath, 'utf-8').split('\n');
         }
 
-        fulfill({visit, errors});
+        fulfill({visit, logdata});
       });
     });
 
-    /*
-    let [requests, responses, dfpm_detections] = await db.get_visit_results(visit_id);
-    let results = stitch_results(requests, responses);
-    let visit = await db.get_visit(visit_id);
-    let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
-    let errorlog = path.join(d_dir, "error.log");
-    let errors = fs.readFileSync(errorlog);
-    */
-
     let [resultdata, visitdata] = await Promise.all([resultp, visitp]);
 
-    return { visit: visitdata.visit, results: resultdata.results, fingerprinting: resultdata.dfpm_detections, errors: visitdata.errors }
+    return { visit: visitdata.visit, results: resultdata.results, fingerprinting: resultdata.dfpm_detections, logdata: visitdata.logdata }
   },
   RequestSearch: async function(searchstring, perPage=20, currentPage=1) {
     // needs improvement. lots of improvement.
     return db.search_requests_and_responses(searchstring, perPage, currentPage);
   },
   TargetAdd: async function(submitted_url, devname) {
+    logger.LogMessage(null, "TargetAdd called", logger.LOGLEVELS.DEBUG);
     let parsed = url.parse(submitted_url);
     if (parsed.protocol && ["http:", "https:", "data:"].indexOf(parsed.protocol) < 0) {
         throw "Invalid protocol";
@@ -628,6 +644,7 @@ module.exports = {
       target = target[0];
     }
 
+    logger.LogMessage(null, `Creating visit from target ${target.target_id}`, logger.LOGLEVELS.DEBUG);
     let visit = await VisitCreate(target.target_id, devname);
 
     if (!visit) {
@@ -643,6 +660,6 @@ module.exports = {
     return await db.list_targets(perPage=pagesize, currentPage=page);
   },
   TargetVisits: async function(target_id, pagesize=20, page=1) {
-    return await db.list_target_visits(target_id, perPage=pagesize);
+    return await db.list_target_visits(target_id, perPage=pagesize, page=page);
   }
 }

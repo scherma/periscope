@@ -133,14 +133,12 @@ module.exports = {
   computed: {
   },
   beforeMount: function () {
-    this.page = this.$route.query.page ? this.$route.query.page : 1;
-    this.pagesize = this.$route.query.pagesize ? this.$route.query.pagesize : 20;
     this.searchTerm = this.$route.query.q;
     this.fetchResults();
   },
   beforeRouteUpdate(to, from, next) {
-    this.page = to.query.page ? to.query.page : 1;
-    this.pagesize = to.query.pagesize ? to.query.pagesize : 20;
+    this.page = to.query.page;
+    this.pagesize = to.query.pagesize;
     this.searchTerm = to.query.q;
     this.fetchResults();
     next();

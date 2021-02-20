@@ -33,6 +33,15 @@
             <b-row v-if="visitData.visit.settings">
               <b-col lg="2" class="font-weight-bold">User Agent</b-col><b-col lg="10">{{ visitData.visit.settings.userAgent }}</b-col>
             </b-row>
+            <b-row>
+              <b-col>&nbsp;</b-col>
+            </b-row>
+            <b-row>
+              <b-col lg="2" class="font-weight-bold">Raw data size</b-col><b-col lg="10">{{ visitData.results.summary.total_response_data }}</b-col>
+            </b-row>
+            <b-row>
+              <b-col lg="2" class="font-weight-bold">Load time</b-col><b-col lg="10">{{ visitData.results.summary.total_load_time }} seconds</b-col>
+            </b-row>
           </b-col>
           <b-col lg="4" class="thumb-col mt-2 mb-2">
             <a v-b-modal.screenshot v-if="visitData.visit.visit_id" center>
@@ -48,11 +57,11 @@
                 <b-button size="sm" variant="primary" v-b-toggle.collapse-headers class="visit-nav-btn">
                   <b-icon-eye font-scale="1.5"></b-icon-eye>&nbsp; See headers</b-button>
               </b-nav-item>
-              <b-nav-item class="visit-nav-item-left" v-if="visitData.errors">
-                <b-button size="sm" variant="secondary" v-b-toggle.collapse-errors class="visit-nav-btn">
-                  <b-icon icon="exclamation-triangle" font-scale="1.5"></b-icon>&nbsp; See errors</b-button>
+              <b-nav-item class="visit-nav-item-left" v-if="visitData.logdata">
+                <b-button size="sm" variant="secondary" v-b-toggle.collapse-log class="visit-nav-btn">
+                  <b-icon icon="exclamation-triangle" font-scale="1.5"></b-icon>&nbsp; See log</b-button>
               </b-nav-item>
-              <b-nav-item class="visit-nav-item-left" v-if="visitData.fingerprinting">
+              <b-nav-item class="visit-nav-item-left" v-if="visitData.fingerprinting.length">
                 <b-button size="sm" variant="secondary" v-b-toggle.collapse-fingerprinting class="visit-nav-btn">
                   <i class="mdi mdi-fingerprint"></i>&nbsp; See fingerprinting</b-button>
               </b-nav-item>
@@ -61,8 +70,9 @@
               <b-nav-item right class="visit-nav-item-right">
                 <re-run :targetID="visitData.visit.target_id" @visit-rerun="loadNewVisit"></re-run>
               </b-nav-item>
-              <b-nav-item right class="visit-nav-item-right">
-                <b-button size="sm" variant="secondary" :href="'/visits/' + visitData.visit.visit_id + '/allfiles'" right  class="visit-nav-btn">
+              <b-nav-item right class="visit-nav-item-right" :href="`/visits/${visitData.visit.visit_id}/allfiles`"> 
+                <b-button size="sm" variant="secondary" right 
+                  :aria-label="`Get all files for visit ${visitData.visit.visit_id}`" class="visit-nav-btn">
                   <b-icon-arrow-bar-down font-scale="1.5"></b-icon-arrow-bar-down> Get all files</b-button>  
               </b-nav-item>
             </b-navbar-nav>
@@ -70,12 +80,12 @@
         </b-navbar>
       </b-col>
     </b-row>
-    <b-collapse id="collapse-errors" v-if="visitData.errors">
+    <b-collapse id="collapse-log" v-if="visitData.logdata">
       <b-row>
         <b-alert show class="alert-lowpad">
-          <h5>Errors</h5>
-          <b-row v-for="error in visitData.errors" :key="error">
-            <b-col class="longdata text-monospace" >{{error}}</b-col>
+          <h5>Log entries</h5>
+          <b-row v-for="log in visitData.logdata" :key="log">
+            <b-col class="longdata text-monospace" >{{log}}</b-col>
           </b-row>
         </b-alert>
       </b-row>
@@ -120,7 +130,7 @@
                 {{ request.request_url }}</b-col>
               <b-col lg="1" class="align-middle mt-2 mb-2">
                 <b-button variant="secondary" size="sm" class="get-file" :aria-label='"Download file for request " + request.file_id'
-                  :href="'/visits/' + visitData.visit.visit_id + '/file/' + request.file_id" right>
+                  :href="`/visits/${visitData.visit.visit_id}/file/${request.file_id}`" right>
                   <i class="material-icons md-18 align-text-top" style="font-size: 18px">arrow_downward</i></b-button>  
               </b-col>
             </b-row>
@@ -250,22 +260,22 @@ module.exports = {
         },
         results: []
       },
-      showErrors: false
+      showLog: false
     }
   },
   methods: {
     fetchVisitData: async function () {
       let data = await axios({
         method: "get",
-        url: "/visits/" + this.$route.params.id,
+        url: `/visits/${this.$route.params.id}`,
       });
       this.visitData = data.data;
-      this.title = "Visit " + this.visitData.visit.visit_id;
+      this.title = `Visit ${this.visitData.visit.visit_id}`;
     },
     newVisit: async function () {
       let data = await axios({
         method: "get",
-        url: "/targets/" + this.visitData.visit.target_id + "/new-visit"
+        url: `/targets/${this.visitData.visit.target_id}/new-visit`
       });
       return data;
     },
@@ -277,7 +287,7 @@ module.exports = {
   },
   computed: {
     screenshotPath: function() {
-      return '/visits/' + this.visitData.visit.visit_id + '/screenshot';
+      return `/visits/${this.visitData.visit.visit_id}/screenshot`;
     }
   },
   beforeMount: function () {

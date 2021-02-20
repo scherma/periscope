@@ -63,3 +63,14 @@ body {
     margin-bottom: 2rem;
   }
 }
+
+@media (max-width: 575px) {
+  .main-nav-form form {
+    width: 100%;
+    margin: 1rem 0 1rem 0;
+  }
+
+  .main-nav-form-item {
+    margin: 2px 0 2px 0;
+  }
+}

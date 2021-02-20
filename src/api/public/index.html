@@ -7,19 +7,24 @@
   </head>
   <body>
     <b-container id="app" class="app" fluid>
-      <b-navbar class="main-nav" variant="primary" fixed="top" sticky type="dark">
+      <b-navbar class="main-nav" variant="primary" fixed="top" sticky type="dark" toggleable="sm">
         <b-container class="main-nav-wrap" fluid variant="primary">
           <b-navbar-nav>
             <b-navbar-brand>PERISC<b-icon-eye></b-icon-eye>PE</b-navbar-brand>
-            <b-nav-item to="/">Visits</b-nav-item>
-            <b-nav-item to="/targets">Targets</b-nav-item>
           </b-navbar-nav>
-          <b-navbar-nav>
-            <b-nav-form>
-              <b-form-input size="sm" class="mr-sm-2" placeholder="Search headers" name="search" v-model="search"></b-form-input>
-              <b-button @click.stop.prevent="submit()" size="sm" variant="secondary" type="submit">Search</b-button>
+          <b-collapse is-nav id="periscope-nav">
+            <b-navbar-nav>
+              <b-nav-item to="/" left>Visits</b-nav-item>
+              <b-nav-item to="/targets" left>Targets</b-nav-item>
+            </b-navbar-nav>
+            <b-nav-form class="main-nav-form ml-auto" right>
+              <b-navbar-nav class="w-100">
+                <b-form-input size="sm" class="mr-2 main-nav-form-item" placeholder="Search headers" name="search" v-model="search"></b-form-input>
+                <b-button @click.stop.prevent="submit()" size="sm" variant="secondary" type="submit" class="main-nav-form-item">Search</b-button>
+              </b-navbar-nav>
             </b-nav-form>
-          </b-navbar-nav>
+          </b-collapse>
+          <b-navbar-toggle target="periscope-nav"></b-navbar-toggle>
         </b-container>
       </b-navbar>
       <b-container class="main-content" fluid>

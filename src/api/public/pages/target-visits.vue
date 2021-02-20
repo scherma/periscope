@@ -80,14 +80,14 @@ module.exports = {
     fetchVisits: async function () {
       let data = await axios({
         method: "get",
-        url: "/targets/" + this.$route.params.id + "?page=" + this.page,
+        url: `/targets/${this.$route.params.id}?page=${this.page}`,
       });
       this.visits = data.data.data;
       this.pagination = data.data.pagination;
     },
     linkGen(pageNum) {
       return {
-        path: '/visits',
+        path: `/targets/${this.$route.params.id}`,
         query: { page: pageNum }
       }
     },

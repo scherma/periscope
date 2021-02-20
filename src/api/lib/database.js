@@ -49,10 +49,10 @@ module.exports = {
     "INSERT INTO request_headers(request_id, header_name, header_value) SELECT ir.request_id, req_h.header_name, req_h.header_value FROM ir, req_h " +
     "RETURNING *";
     
-    let resp_sql = "WITH resp(request_id, visit_id, file_id, response_time, response_size, response_code) " +
-    "AS (VALUES (?::integer, ?::integer, ?::integer, ?::timestamp with time zone, ?::integer, ?::integer)), " +
+    let resp_sql = "WITH resp(request_id, visit_id, file_id, response_time, response_size, response_code, response_data_length) " +
+    "AS (VALUES (?::integer, ?::integer, ?::integer, ?::timestamp with time zone, ?::integer, ?::integer, ?::integer)), " +
     "resp_h(header_name, header_value) AS (SELECT header_name, header_value FROM headers_to_rows(?)), " +
-    "ir AS (INSERT INTO responses(request_id, visit_id, file_id, response_time, response_size, response_code) SELECT * FROM resp RETURNING response_id) " +
+    "ir AS (INSERT INTO responses(request_id, visit_id, file_id, response_time, response_size, response_code, response_data_length) SELECT * FROM resp RETURNING response_id) " +
     "INSERT INTO response_headers(response_id, header_name, header_value) SELECT ir.response_id, resp_h.header_name, resp_h.header_value FROM ir, resp_h";
 
     let reqrows = 0;
@@ -62,12 +62,12 @@ module.exports = {
       pg.raw(req_sql, [visit_id, request.request_time, request.request_post_data, request.request_url, request.request_method, request.request_headers])
       .then((reqs) => {
         if (request.response_headers && reqs.rows) {
-          pg.raw(resp_sql, [reqs.rows[0].request_id, visit_id, request.file_id, request.response_time, request.response_size, request.response_code, request.response_headers])
+          pg.raw(resp_sql, [reqs.rows[0].request_id, visit_id, request.file_id, request.response_time, request.response_size, request.response_code, request.response_body.length, request.response_headers])
           .then((resps) => {
             resprows += resps.rowCount;
           })
           .catch((err) => {
-            console.error([reqs.rows[0].request_id, visit_id, request.file_id, request.response_time, request.response_size, request.response_code, request.response_headers]);
+            console.error([reqs.rows[0].request_id, visit_id, request.file_id, request.response_time, request.response_size, request.response_code, request.response_body.length, request.response_headers]);
             console.error(err.message);
           });
           reqrows += reqs.rowCount;

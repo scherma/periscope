@@ -81,7 +81,7 @@ module.exports = {
     fetchVisits: async function () {
       let data = await axios({
         method: "get",
-        url: "/visits?page=" + this.page,
+        url: `/visits?page=${this.page}`,
       });
       this.visits = data.data.data;
       this.pagination = data.data.pagination;
