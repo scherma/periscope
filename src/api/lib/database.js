@@ -9,9 +9,9 @@ var dbparams = {
   }
 };
 var pg = require("knex")(dbparams);
-var moment = require("moment");
 const { attachPaginate } = require("knex-paginate");
 attachPaginate();
+const logger = require("./logger");
 
 module.exports = {
   add_target: function(submitted_url, submittime) {
@@ -26,7 +26,8 @@ module.exports = {
     return pg.insert({
       target_id: target_id,
       createtime: formatted,
-      settings: settings
+      settings: settings,
+      status: "created"
     }).returning("*").into("visits");
   },
   get_visit_results: function(visit_id) {
@@ -57,28 +58,89 @@ module.exports = {
 
     let reqrows = 0;
     let resprows = 0;
+    let rows_added = [];
     requests.forEach((request) => {
-      // need to fix addition of rowCount - not working because it's inside a knex promise
-      pg.raw(req_sql, [visit_id, request.request_time, request.request_post_data, request.request_url, request.request_method, request.request_headers])
-      .then((reqs) => {
-        if (request.response_headers && reqs.rows) {
-          pg.raw(resp_sql, [reqs.rows[0].request_id, visit_id, request.file_id, request.response_time, request.response_size, request.response_code, request.response_body.length, request.response_headers])
-          .then((resps) => {
-            resprows += resps.rowCount;
+      // there's probably a cleaner way to count the rows
+      // omg this is ugly. but it works!
+      let outdata = pg.raw(
+        req_sql, 
+        [
+          visit_id, 
+          request.request_time, 
+          request.request_post_data, 
+          request.request_url, 
+          request.request_method, 
+          request.request_headers
+        ]
+      ).then((reqs) => {
+        let resp_data;
+        if (request.response_headers && reqs.rows.length) {
+          resp_data = pg.raw(
+            resp_sql, 
+            [
+              reqs.rows[0].request_id, 
+              visit_id, 
+              request.file_id, 
+              request.response_time, 
+              request.response_size, 
+              request.response_code, 
+              request.response_body.length, 
+              request.response_headers
+            ]
+          ).then((resps) => {
+            return resps;
           })
           .catch((err) => {
-            console.error([reqs.rows[0].request_id, visit_id, request.file_id, request.response_time, request.response_size, request.response_code, request.response_body.length, request.response_headers]);
-            console.error(err.message);
+            logger.error(
+              null, 
+              [
+                reqs.rows[0].request_id, 
+                visit_id, 
+                request.file_id,
+                request.response_time, 
+                request.response_size, 
+                request.response_code, 
+                request.response_body.length, 
+                request.response_headers
+              ]);
+            logger.error(null, err.message);
           });
-          reqrows += reqs.rowCount;
+
+          return Promise.resolve(resp_data)
+          .then((resp_out) => {
+            return [reqs, resp_out];
+          });
         }
       }).catch((err) => {
-        console.error([visit_id, request.request_time, request.request_post_data, request.request_url, request.request_method, request.request_headers]);
-        console.error(err.message);
+        logger.error(
+          null, 
+          [
+            visit_id, 
+            request.request_time, 
+            request.request_post_data, 
+            request.request_url, 
+            request.request_method, 
+            request.request_headers
+          ]);
+        logger.error(null, err.message);
       });
+      rows_added.push(outdata);
     });
 
-    return [reqrows, resprows];
+    return Promise.all(rows_added)
+    .then((results) => {
+      results.forEach((result) => {
+        if (Array.isArray(result) && result.length > 0 && result[0].rowCount) {
+          reqrows = reqrows + result[0].rowCount;
+        }
+        
+        if (Array.isArray(result) && result.length > 1 && result[1].rowCount) {
+          resprows = resprows + result[1].rowCount;
+        }
+      })
+  
+      return [reqrows, resprows];
+    });
   },
   add_dfpm: async function(detections) {
     return pg.insert(detections).into("dfpm_detections");
@@ -109,6 +171,10 @@ module.exports = {
       "visits.*"
     ).leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id})
     .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+  },
+  set_status: function(visit_id, status) {
+    logger.debug(null, `Setting status ${status} for visit ${visit_id}`);
+    return pg("visits").update({status: status}).where({visit_id: visit_id});
   },
   mark_complete: function(visit_id) {
     return pg("visits").update({completed: true}).where({visit_id: visit_id});

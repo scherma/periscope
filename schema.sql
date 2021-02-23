@@ -10,6 +10,7 @@ CREATE TABLE visits (
     createtime timestamp with time zone,
     time_actioned timestamp with time zone, 
     completed bool DEFAULT FALSE,
+    status text,
     screenshot_path text,
     settings jsonb
     );

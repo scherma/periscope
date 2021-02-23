@@ -6,6 +6,15 @@ var logger = require('morgan');
 var indexRouter = require('./routes/index');
 
 var app = express();
+const server = require("http").Server(app);
+const io = require('socket.io')(server, { allowEIO3: true });
+
+app.use(function (req, res, next) {
+    res.io = io;
+    next();
+  });
+
+const websockets = require("./routes/websocket")(io);
 
 app.use(logger('dev'));
 app.use(express.json());
@@ -15,4 +24,4 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
 
-module.exports = app;
+module.exports = {app: app, server: server};

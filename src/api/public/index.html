@@ -12,10 +12,10 @@
           <b-navbar-nav>
             <b-navbar-brand>PERISC<b-icon-eye></b-icon-eye>PE</b-navbar-brand>
           </b-navbar-nav>
-          <b-collapse is-nav id="periscope-nav">
+          <b-collapse is-nav id="periscope-nav" ref="periscope-nav">
             <b-navbar-nav>
               <b-nav-item to="/" left>Visits</b-nav-item>
-              <b-nav-item to="/targets" left>Targets</b-nav-item>
+              <b-nav-item to="/targets">Targets</b-nav-item>
             </b-navbar-nav>
             <b-nav-form class="main-nav-form ml-auto" right>
               <b-navbar-nav class="w-100">
@@ -36,6 +36,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
     <link type="text/css" rel="stylesheet" href="//unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuex@3.6.2/dist/vuex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue-socket.io@3.0.10/dist/vue-socketio.min.js"></script>
     <script src="//unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue.js"></script>
     <script src="//unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue-icons.min.js"></script>
     <link type="text/css" rel="stylesheet" href="//cdn.materialdesignicons.com/5.3.45/css/materialdesignicons.min.css" />
@@ -45,9 +47,23 @@
   </body>
 </html>
 
-<script>
+<script type="module">
+  import store from "./javascripts/store.js";
+
+  Vue.use(
+    new VueSocketIO({
+      connection: "http://yourdomain/ip:port/",
+      vuex: {
+        store,
+        actionPrefix: "SOCKET_",
+        mutationPrefix: "SOCKET_",
+      }
+    })
+  );
+
   const app = new Vue({
     el: "#app",
+    store: store,
     router,
     data: function() {
       return {
@@ -58,6 +74,11 @@
       submit: function(evt) {
         this.$router.push(`/search?q=${this.search}`);
       }
+    },
+    watch: {
+      $route(to, from) {
+        document.title = to.name;
+      },
     }
   }).$mount('#app');
 </script>

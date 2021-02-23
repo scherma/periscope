@@ -5,7 +5,7 @@
         Visit {{visitData.visit.visit_id}} screenshot
       </template>
       <div class="d-block modal-wide">
-        <b-img :src="screenshotPath" thumbnail="true">
+        <b-img-lazy :src="`/visits/${this.visitData.visit.visit_id}/screenshot`" thumbnail="true" id="visit-windowed-screenshot" alt="Full screenshot for visit" label="Full screenshot for visit"></b-img-lazy>
       </div>
     </b-modal>
     <b-row class="visit-head mb-2">
@@ -28,7 +28,7 @@
               <b-col sm="2" class="font-weight-bold">Processed</b-col><b-col lg="10">{{ visitData.visit.time_actioned }}</b-col>  
             </b-row>
             <b-row>
-              <b-col lg="2" class="font-weight-bold">Complete?</b-col><b-col lg="10">{{ visitData.visit.completed }}</b-col>
+              <b-col lg="2" class="font-weight-bold">Status</b-col><b-col lg="10">{{ visitData.visit.status }}</b-col>
             </b-row>
             <b-row v-if="visitData.visit.settings">
               <b-col lg="2" class="font-weight-bold">User Agent</b-col><b-col lg="10">{{ visitData.visit.settings.userAgent }}</b-col>
@@ -44,8 +44,12 @@
             </b-row>
           </b-col>
           <b-col lg="4" class="thumb-col mt-2 mb-2">
-            <a v-b-modal.screenshot v-if="visitData.visit.visit_id" center>
-              <b-img center :src="'/visits/' + visitData.visit.visit_id + '/thumbnail'" class="thumbnail">
+            <a v-b-modal.screenshot v-if="visitData.visit.visit_id" id="visit-windowed-screenshot-modal" label="Windowed screenshot" label-for="visit-windowed-screenshot" center>
+              <b-img center 
+                :src="`/visits/${this.visitData.visit.visit_id}/thumbnail?r=${this.r}`" 
+                class="thumbnail" 
+                alt="Screenshot for visit" 
+                id="visit-windowed-screenshot"></b-img>
             </a>
           </b-col>
         </b-row>
@@ -120,6 +124,11 @@
         </b-col>
       </b-row>
     </b-collapse>
+    <b-row v-if="visitData.visit.status!='complete' && visitData.visit.status!='failed'">
+      <b-col class="text-center">
+        <b-spinner label="loading"></b-spinner>
+      </b-col>
+    </b-row>
     <b-row class="request-row" v-for="request in visitData.results.requests" :key="request">
       <b-col>
         <b-row class="request-row-head mb-2">
@@ -129,7 +138,7 @@
                 <span v-if="request.request_method" class="text-uppercase">{{request.request_method}}</span>
                 {{ request.request_url }}</b-col>
               <b-col lg="1" class="align-middle mt-2 mb-2">
-                <b-button variant="secondary" size="sm" class="get-file" :aria-label='"Download file for request " + request.file_id'
+                <b-button v-if="request.file_id >= 0" variant="secondary" size="sm" class="get-file" :aria-label='"Download file for request " + request.file_id'
                   :href="`/visits/${visitData.visit.visit_id}/file/${request.file_id}`" right>
                   <i class="material-icons md-18 align-text-top" style="font-size: 18px">arrow_downward</i></b-button>  
               </b-col>
@@ -139,6 +148,10 @@
         <b-collapse id="collapse-headers">
           <b-row class="request-row-body">
             <b-col lg="6" class="longdata">
+              <b-row class="mb-6">
+                <b-col class="hlabel" md="8">Headers</b-col>
+                <b-col class="htext" md="4">Archive file {{request.file_id}}</b-col>
+              </b-row>
               <b-row v-for="request_header in request.request_headers" :key="request_header">
                 <b-col v-for="(header_val, header_key) in request_header" :key="header_key">
                   <b-row>
@@ -152,7 +165,7 @@
                 <b-col md="4" class="hlabel">HTTP status</b-col>
                 <b-col md="8" class="htext">{{request.response_code}}</b-col>
               </b-row>
-              <b-row v-if="request.response_size">
+              <b-row v-if="request.response_data_length">
                 <b-col md="4" class="hlabel">Response bytes</b-col>
                 <b-col md="8" class="htext">{{request.response_size}}</b-col>
               </b-row>
@@ -258,9 +271,18 @@ module.exports = {
         visit: {
           visit_id: null
         },
-        results: []
+        results: {
+          summary: {
+            total_response_data: "",
+            total_load_time: ""
+          },
+          requests: []
+        },
+        fingerprinting: []
       },
-      showLog: false
+      showLog: false,
+      r: 0,
+      toastCount: 0
     }
   },
   methods: {
@@ -283,15 +305,42 @@ module.exports = {
       console.log("loadNewVisit called");
       router.push(`/visit/${visit_id}`);
       this.fetchVisitData();
+      this.joinRoom();
+    },
+    joinRoom: function() {
+      this.$socket.emit('joinRoom', `visit/${this.$route.params.id}`);
+    },
+    loadThumb: async function() {
+      this.r = this.r + 1;
+    },
+    makeToast(message, variant) {
+      this.toastCount++;
+      this.$bvToast.toast(message, {
+        autoHideDelay: 5000,
+        appendToast: true,
+        variant: variant,
+        name: b-toaster-top-center,
+        title: level
+      });
+    }
+  },
+  sockets: {
+    status(data) {
+      if (data == "complete") {
+        this.fetchVisitData();
+        this.loadThumb();
+      }
+    },
+    dfpm_alert(data) {
+      console.log(data);
+      this.makeToast(`${data.category} fingerprinting detected!`, data.level)
     }
   },
   computed: {
-    screenshotPath: function() {
-      return `/visits/${this.visitData.visit.visit_id}/screenshot`;
-    }
   },
   beforeMount: function () {
     this.fetchVisitData();
+    this.joinRoom();
   },
   components: {
     "re-run": httpVueLoader("/pages/components/re-run-target.vue")

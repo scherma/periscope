@@ -29,7 +29,7 @@ function install_periscope_dependencies() {
     # install basic tools
     dnf install -y nginx tcpdump wget net-tools curl epel-release yum-utils rsync nodejs postgresql-server postgresql-contrib 
     # install chrome dependencies
-    dnf install -y GraphicsMagick atk gtk3 alsa-lib-devel libXScrnSaver libXtst libXdamage libxComposite libX11
+    dnf install -y GraphicsMagick atk gtk3 alsa-lib-devel libXScrnSaver libXtst libXdamage libxComposite libX11 mesa-libgbm libxshmfence
     
     # set postgres to use tcp socket auth with password instead of unix socket (needed by knex/pg)
     sed -r 's/^(host.*127.0.0.1\/32\s+) ident/\1 md5/' /var/lib/pgsql/data/pg_hba.conf > /var/lib/pgsql/9.6/data/pg_hba.conf

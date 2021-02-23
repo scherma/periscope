@@ -12,6 +12,7 @@ const dfpm = require("./DFPM/dfpm.js");
 const logger = require("./logger");
 const { isNull } = require("util");
 const prettyBytes = require("pretty-bytes");
+const websockets = require('../routes/websocket');
 
 // allows certificate errors to be automatically be accepted
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -29,7 +30,7 @@ const periscopeDefaultDevice = {
 }
 
 let response_add_data = function(request_time, request, response, result, errorlog) {
-  logger.LogMessage(errorlog, `Entered response_add_data() for ${request.url()}`, logger.LOGLEVELS.DEBUG);
+  logger.debug(errorlog, `Entered response_add_data() for ${request.url()}`);
   let request_url = request.url();
   let request_method = request.method();
   let request_headers = [];
@@ -43,39 +44,41 @@ let response_add_data = function(request_time, request, response, result, errorl
   try {
     request_headers = request.headers();
   } catch (err) {
-    logger.LogMessage(errorlog, `Unable to add request headers: ${err.message}`, logger.LOGLEVELS.ERROR);
+    logger.error(errorlog, `Unable to add request headers: ${err.message}`);
   }
 
   try {
     request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
   } catch (err) {
-    logger.LogMessage(errorlog, `Unable to add POST data: ${err.message}`, logger.LOGLEVELS.ERROR);
+    logger.error(errorlog, `Unable to add POST data: ${err.message}`);
   }
 
-  try {
-    response_code = response.statusCode;
-  } catch (err) {
-    logger.LogMessage(errorlog, `Unable to add response code: ${err.message}`, logger.LOGLEVELS.ERROR);
+  if (typeof response !== 'undefined') {
+    try {
+      if (response && response.statusCode) {response_code = response.statusCode;}
+    } catch (err) {
+      logger.error(errorlog, `Unable to add response code: ${err.message}`);
+    }
+  
+    try {
+      if (response && response.headers) {response_headers = response.headers;}
+    } catch (err) {
+      logger.error(errorlog, `Unable to add response headers: ${err.message}`);
+    }
+  
+    try {
+      if (response_headers) {response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];}
+    } catch (err) {
+      logger.error(errorlog, `Unable to add response size: ${err.message}`);
+    }
+  
+    try {
+      if (response && response.body) {response_body = response.body;}
+    } catch (err) {
+      logger.error(errorlog, `Unable to add response body: ${err.message}`);
+    }  
   }
-
-  try {
-    response_headers = response.headers;
-  } catch (err) {
-    logger.LogMessage(errorlog, `Unable to add response headers: ${err.message}`, logger.LOGLEVELS.ERROR);
-  }
-
-  try {
-    response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
-  } catch (err) {
-    logger.LogMessage(errorlog, `Unable to add response size: ${err.message}`, logger.LOGLEVELS.ERROR);
-  }
-
-  try {
-    response_body = response.body;
-  } catch (err) {
-    logger.LogMessage(errorlog, `Unable to add response body: ${err.message}`, logger.LOGLEVELS.ERROR);
-  }
-
+  
   response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
 
   result.push({
@@ -91,29 +94,31 @@ let response_add_data = function(request_time, request, response, result, errorl
     response_time,
     file_id: null
   });
-  logger.LogMessage(errorlog, `Completed response_add_data() for ${request.url()}`, logger.LOGLEVELS.DEBUG);
+  logger.debug(errorlog, `Completed response_add_data() for ${request.url()}`);
 }
 
 let VisitTarget = async function(visit) {
   const browser = await stager.getPuppet();
   const page = await browser.newPage();
 
+  await db.set_status(visit.visit_id, "Page initialized");
+
   try {
     // simulate the options chosen (defaults to a desktop-like defined by periscopeDefaultDevice)
     page.emulate(visit.settings);
-    logger.LogMessage(visit.errorlog, `Settings emulated: ${JSON.stringify(visit.settings)}`, logger.LOGLEVELS.DEBUG);
+    logger.debug(visit.errorlog, `Settings emulated: ${JSON.stringify(visit.settings)}`);
 
     const result = [];
     const dfpm_detections = [];
     let dfpm_info_count = 0;
     await page.setRequestInterception(true);
-    logger.LogMessage(visit.errorlog, `Request interception set`, logger.LOGLEVELS.DEBUG);
+    logger.debug(visit.errorlog, `Request interception set`);
 
 
     page.on("request", request => {
       // capture information about requests and responses
       const request_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
-      logger.LogMessage(visit.errorlog, `Entered page.on('request') for ${request.url()}`, logger.LOGLEVELS.DEBUG);
+      logger.debug(visit.errorlog, `Entered page.on('request') for ${request.url()}`);
 
       request_client({
         uri: request.url(),
@@ -123,16 +128,16 @@ let VisitTarget = async function(visit) {
         strictSSL: false,
         insecure: true,
       }).then(response => {
-        logger.LogMessage(visit.errorlog, `Entered request_client() for page ${request.url()}`, logger.LOGLEVELS.DEBUG);
+        logger.debug(visit.errorlog, `Entered request_client() for page ${request.url()}`);
 
         response_add_data(request_time, request, response, result, visit.errorlog);
 
         
-        logger.LogMessage(visit.errorlog, `Continuing request for ${request.url()}`, logger.LOGLEVELS.DEBUG);
+        logger.debug(visit.errorlog, `Continuing request for ${request.url()}`);
         request.continue();
-        logger.LogMessage(visit.errorlog, `Continued request for ${request.url()}`, logger.LOGLEVELS.DEBUG);
+        logger.debug(visit.errorlog, `Continued request for ${request.url()}`);
       }).catch(error => {
-        logger.LogMessage(visit.errorlog, `Error in request client: ${error.message}`, logger.LOGLEVELS.ERROR);
+        
 
         let result_obj = {
           request_url: request.url(),
@@ -148,54 +153,35 @@ let VisitTarget = async function(visit) {
           file_id: null
         }
 
-        try {
-          result_obj.request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
-        } catch (err) {
-          logger.LogMessage(visit.errorlog, `Unable to add POST data: ${err.message}`, logger.LOGLEVELS.ERROR);
+        if (result_obj.request_url.startsWith("data:")) {
+          result_obj.response_time = result_obj.request_time;
+        } else {
+          logger.error(visit.errorlog, `Error in request client: ${error.message}`);
+          
+          result_obj.response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
+
+          try {
+            result_obj.request_post_data = (typeof request.postData() === 'undefined') ? null : request.postData();
+          } catch (err) {
+            logger.error(visit.errorlog, `Unable to add POST data: ${err.message}`);
+          }
+
+          logger.error(visit.errorlog, `Aborting request for ${request.url()}`);
+          request.abort();
         }
 
-        try {
-          result_obj.response_code = response.statusCode;
-        } catch (err) {
-          logger.LogMessage(visit.errorlog, `Unable to add response code: ${err.message}`, logger.LOGLEVELS.ERROR);
-        }
-
-        try {
-          result_obj.response_headers = response.headers;
-        } catch (err) {
-          logger.LogMessage(visit.errorlog, `Unable to add response headers: ${err.message}`, logger.LOGLEVELS.ERROR);
-        }
-
-        try {
-          result_obj.response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];
-        } catch (err) {
-          logger.LogMessage(visit.errorlog, `Unable to add response size: ${err.message}`, logger.LOGLEVELS.ERROR);
-        }
-
-        try {
-          result_obj.response_body = response.body;
-        } catch (err) {
-          logger.LogMessage(visit.errorlog, `Unable to add response body: ${err.message}`, logger.LOGLEVELS.ERROR);
-        }
-
-        result_obj.response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
-
-        logger.LogMessage(visit.errorlog, `Aborting request for ${request.url()}`, logger.LOGLEVELS.ERROR);
-        request.abort();
-
-        
-        logger.LogMessage(visit.errorlog, `Pushing object to results`, logger.LOGLEVELS.DEBUG);
+        logger.debug(visit.errorlog, `Pushing object to results`);
         result.push(result_obj);
       });
     });
 
     page.on('console', msg => {
-      logger.LogMessage(visit.errorlog, `Entered page.on('console')`, logger.LOGLEVELS.DEBUG);
+      logger.debug(visit.errorlog, `Entered page.on('console')`);
       if (msg._type == "log") {
         // some messages are not DFPM detections - don't want to break if we get any
         // but still output to error log in case of something useful
         try {
-          logger.LogMessage(visit.errorlog, `Parsing message JSON: ${msg._text}`, logger.LOGLEVELS.DEBUG);
+          logger.debug(visit.errorlog, `Parsing message JSON: ${msg._text}`);
           let evt = JSON.parse(msg._text);
           if (evt.level == "warning" || evt.level == "danger") {
             // capture events that DFPM flags as suspicious
@@ -205,22 +191,25 @@ let VisitTarget = async function(visit) {
                 method: evt.method,
                 dfpm_path: evt.path,
                 dfpm_level: evt.level,
-                dfpm_category: evt.catevory,
+                dfpm_category: evt.category,
                 dfpm_url: evt.url,
                 dfpm_raw: evt
               }
             );
+            websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'dfpm_alert', { category: evt.category, level: evt.level });
           } else if (evt.level == "info") {
+            logger.info(visit.errorlog, `${evt.category} ${evt.method} seen in ${evt.url}`);
             dfpm_info_count += 1;
           }
         } catch (err) {
-          logger.LogMessage(visit.errorlog, `Error in page.on('console'): ${err.message}`, logger.LOGLEVELS.ERROR);
-          logger.LogMessage(visit.errorlog, `Data: ${msg._text}`, logger.LOGLEVELS.ERROR);
+          logger.error(err);
+          logger.info(visit.errorlog, `Non-JSON message from console: ${msg._text}`);
         }
       }
     });
 
-    logger.LogMessage(visit.errorlog, `Going to page ${visit.query}`, logger.LOGLEVELS.INFO);
+    logger.info(visit.errorlog, `Going to page ${visit.query}`);
+    await db.set_status(visit.visit_id, "Loading page");
     const response = await page.goto(
       visit.query, 
       {
@@ -229,6 +218,36 @@ let VisitTarget = async function(visit) {
         timeout: visit.timeout ? visit.timeout : 0
       }
     );
+
+    logger.info(visit.errorlog, `Letting DFPM gather data, waiting a few secs...`);
+    await dfpm.sleep(10*1000);
+
+    await db.set_status(visit.visit_id, "Writing screenshots");
+
+    let imagedir = images_folder(moment(visit.time));
+
+    let screenshot_file_path = path.join(imagedir, `${visit.visit_id}.png`);
+    let screenshot_window_path = path.join(imagedir, `${visit.visit_id}_thumb.png`);
+    let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
+
+    // generate window view and convert it to thumbnail
+    logger.debug(visit.errorlog, `Generating windowed screenshot to ${screenshot_window_path}`);
+    await page.screenshot({path: screenshot_window_path});
+
+    gm(screenshot_window_path)
+    .resize(null, 250)
+    .write(screenshot_window_path, function(err) {
+      if (err) {
+        logger.error(visit.errorlog, `Failed to write thumbnail for ${visit.visit_id}: ${err.message}`);
+      }
+    });
+
+    // generate screenshot of entire page
+    logger.debug(visit.errorlog, `Generating screenshot to ${screenshot_file_path}`);
+
+    await page.screenshot({path: screenshot_file_path, fullPage: true});
+
+    await db.set_status(visit.visit_id, "Writing files");
 
     let d_path = date_folder(moment(visit.time));
     let d_dir = data_dir(d_path, visit.visit_id);
@@ -243,11 +262,11 @@ let VisitTarget = async function(visit) {
 
     outfiles.on("close", function() {
       let archive_msg = `${archive.pointer()} total bytes written to archive for visit ${visit.visit_id}`;
-      logger.LogMessage(visit.errorlog, archive_msg, logger.LOGLEVELS.INFO);
+      logger.info(visit.errorlog, archive_msg);
     });
 
     archive.on("error", function(err) {
-      logger.LogMessage(visit.errorlog, `Error archiving files: ${err.message}`, logger.LOGLEVELS.ERROR);
+      logger.error(visit.errorlog, `Error archiving files: ${err.message}`);
       throw err;
     });
 
@@ -261,46 +280,25 @@ let VisitTarget = async function(visit) {
         r.response_body = '';
       }
       
-      logger.LogMessage(visit.errorlog, `Appending file ${idx} to archive`, logger.LOGLEVELS.DEBUG);
+      logger.debug(visit.errorlog, `Appending file ${idx} to archive`);
       archive.append(r.response_body, {name: `${idx}`});
     });
 
-    logger.LogMessage(visit.errorlog, `Finalizing archive`, logger.LOGLEVELS.DEBUG);
+    logger.debug(visit.errorlog, `Finalizing archive`);
     archive.finalize();
 
-    let imagedir = images_folder(moment(visit.time));
-
-    let screenshot_file_path = path.join(imagedir, `${visit.visit_id}.png`);
-    let screenshot_window_path = path.join(imagedir, `${visit.visit_id}_thumb.png`);
-    let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
-
-    // generate window view and convert it to thumbnail
-    logger.LogMessage(visit.errorlog, `Generating windowed screenshot to ${screenshot_window_path}`, logger.LOGLEVELS.DEBUG);
-    await page.screenshot({path: screenshot_window_path});
-    gm(screenshot_window_path)
-    .resize(null, 250)
-    .write(screenshot_window_path, function(err) {
-      if (err) {
-        logger.LogMessage(visit.errorlog, `Failed to write thumbnail for ${visit.visit_id}: ${err.message}`, logger.LOGLEVELS.ERROR);
-      }
-    });
-
-    // generate screenshot of entire page
-    logger.LogMessage(visit.errorlog, `Generating screenshot to ${screenshot_file_path}`, logger.LOGLEVELS.DEBUG);
-    await page.screenshot({path: screenshot_file_path, fullPage: true});
-
     // allow time before exiting browser process for fingerprint detection to generate results
-    logger.LogMessage(visit.errorlog, `Letting DFPM gather data, waiting a few secs...`, logger.LOGLEVELS.INFO);
-    await dfpm.sleep(10*1000);
+    logger.debug(visit.errorlog, `Closing page`);
     await page.close();
+    logger.debug(visit.errorlog, `Page closed`);
 
-    logger.LogMessage(visit.errorlog, `Marking completed in DB`, logger.LOGLEVELS.DEBUG);
+    logger.debug(visit.errorlog, `Marking completed in DB`);
     await db.mark_complete(visit.visit_id);
-    logger.LogMessage(visit.errorlog, `DFPM logged ${dfpm_info_count} info level events for visit ${visit.visit_id}`, logger.LOGLEVELS.INFO);
+    logger.info(visit.errorlog, `DFPM logged ${dfpm_info_count} info level events for visit ${visit.visit_id}`);
 
     return [result, dfpm_detections, screenshot_uri_path];
   } catch (err) {
-    logger.LogMessage(visit.errorlog, `Fatal! Error could not be handled: ${err}`, logger.LOGLEVELS.ERROR);
+    logger.fatal(visit.errorlog, `Fatal! Error in VisitTarget() could not be handled: ${err}`);
     // make sure the browser is always closed even if stuff breaks - otherwise leaves hung puppeteer threads indefinitely
     await page.close();
     throw(err);
@@ -325,38 +323,54 @@ let Visit = async function(visit) {
     }
 
     let images_dir = images_folder(moment(action_time));
-    logger.LogMessage(visit.errorlog, `Images for visit ${visit.visit_id} being stored in ${images_dir}`, logger.LOGLEVELS.INFO);
+    logger.info(visit.errorlog, `Images for visit ${visit.visit_id} being stored in ${images_dir}`);
 
     if (!fs.existsSync(images_dir)) {
       fs.mkdirSync(images_dir);
     }
 
     await db.set_actioned_time(visit.visit_id, action_time);
-    logger.LogMessage(visit.errorlog, `Visit ${visit.visit_id} actioned at ${action_time}`, logger.LOGLEVELS.INFO);
+    logger.info(visit.errorlog, `Visit ${visit.visit_id} actioned at ${action_time}`);
+
     VisitTarget(visit)
     .then(([requests, dfpm_detections, screenshot_uri_path]) => {
-      logger.LogMessage(visit.errorlog, `Adding requests to DB`, logger.LOGLEVELS.DEBUG);
+      logger.debug(visit.errorlog, `Adding requests to DB`);
+      db.set_status(visit.visit_id, `Writing requests to DB`).then(() => {});
+
       db.add_requests(requests, visit.visit_id)
       .then(([req_inserts, resp_inserts]) => {
-        let insert_stats = `Inserted ${req_inserts} requests and ${resp_inserts} responses for visit ${visit.visit_id}`;
-        logger.LogMessage(visit.errorlog, insert_stats, logger.LOGLEVELS.INFO);
+        let insert_stats = `Added ${req_inserts} request headers and ${resp_inserts} response headers in ${requests.length} requests for visit ${visit.visit_id}`;
+        logger.info(visit.errorlog, insert_stats, logger.LOGLEVELS.INFO);
+
         let set_screenshot_path = `Setting visit ${visit.visit_id} screenshot path value to ${screenshot_uri_path}`;
-        logger.LogMessage(visit.errorlog, set_screenshot_path, logger.LOGLEVELS.INFO);
+        logger.info(visit.errorlog, set_screenshot_path);
+
         db.set_screenshot_path(screenshot_uri_path, visit.visit_id)
         .catch((err) => {
-          logger.LogMessage(visit.errorlog, `Error setting screenshot path: ${err.message}`, logger.LOGLEVELS.ERROR);
+          logger.error(visit.errorlog, `Error setting screenshot path: ${err.message}`);
         });
       });
-      logger.LogMessage(visit.errorlog, "Adding DFPM detections to DB", logger.LOGLEVELS.DEBUG);
-      db.add_dfpm(dfpm_detections);
+      logger.debug(visit.errorlog, "Adding DFPM detections to DB");
+      db.set_status(visit.visit_id, `Writing DFPM to DB`).then(() => {});
+      db.add_dfpm(dfpm_detections).then(() => {  
+        db.set_status(visit.visit_id, "complete").then(() => {
+          websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', 'complete');
+        });
+      });
     }).catch((err) => {
-      logger.LogMessage(visit.errorlog, err.message, logger.LOGLEVELS.ERROR);
-      logger.LogMessage(visit.errorlog, `Encountered error processing visit ${visit.visit_id}; wrote to log`, logger.LOGLEVELS.ERROR);
+      logger.error(visit.errorlog, err.message);
+      logger.error(visit.errorlog, `Encountered error processing visit ${visit.visit_id}; wrote to log`);
+      db.set_status(visit.visit_id, `failed`).then(() => {
+        websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', 'failed');
+      });
     });
 
     return action_time;
   } catch(err) {
-    logger.LogMessage(visit.errorlog, `Fatal error in function Visit: ${err.message}`, logger.LOGLEVELS.FATAL);
+    logger.fatal(visit.errorlog, `Fatal error in function Visit: ${err.message}`);
+    db.set_status(visit.visit_id, `failed`).then(() => {
+      websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', 'failed');
+    });
     throw(err);
   }
 }
@@ -373,15 +387,15 @@ let VisitCreate = async function(target_id, devname) {
 }
 
 let VisitRun = async function(visit_id) {
-  logger.LogMessage(null, "VisitRun called", logger.LOGLEVELS.DEBUG);
+  logger.debug(null, "VisitRun called");
   return await db.get_visit(visit_id)
   .then((visit) => {
     if (visit) {
-      logger.LogMessage(null, `Got one! ${visit_id}`, logger.LOGLEVELS.DEBUG);
+      logger.debug(null, `Got one! ${visit_id}`);
       visit = visit[0];
     } else {
       let novisit = `No visit found with id ${visit_id}`;
-      logger.LogMessage(null, novisit, logger.LOGLEVELS.ERROR);
+      logger.error(null, novisit);
       throw novisit;
     }
     if (visit.time_actioned == null) {
@@ -524,7 +538,7 @@ module.exports = {
     return GetDeviceSettings(devname);
   },
   ExtractSavedFile: async function(visit_id, file_id) {
-    logger.LogMessage(null, "ExtractSavedFile called", logger.LOGLEVELS.DEBUG);
+    logger.debug(null, "ExtractSavedFile called");
     // unarchive a specific requested file so that it can be downloaded; we need to load the info from the visit_id 
     // in order to locate the folder results have been stored in (folder is based on date of visit occurrence)
     let visits = await db.get_visit(visit_id);
@@ -549,8 +563,8 @@ module.exports = {
       exec(`tar zxf ${zippath} -C ${tmpvisitdir} ${file_id}`, (err, stdout, stderr) => {
         if (err) {
           let errmsg = `Problem extracting object ${file_id} from archive ${zippath}`;
-          logger.LogMessage(null, errmsg, logger.LOGLEVELS.ERROR);
-          logger.LogMessage(null, err.message, logger.LOGLEVELS.ERROR);
+          logger.error(null, errmsg);
+          logger.error(null, err.message);
           reject(err.message);
         } else {    
           let details = {
@@ -560,14 +574,14 @@ module.exports = {
           
           let detailstr = JSON.stringify(details);
           
-          logger.LogMessage(null, `Returning data: ${detailstr}`, logger.LOGLEVELS.DEBUG);
+          logger.info(null, `Returning extracted file info: ${detailstr}`);
           fulfill(details);
         }
       });
     });
   },
   FilesArchive: async function(visit_id) {
-    logger.LogMessage(null, "FilesArchive called", logger.LOGLEVELS.DEBUG);
+    logger.debug(null, "FilesArchive called");
     // get path for archive for a visit; we need to load the info from the visit_id 
     // in order to locate the folder results have been stored in (folder is based on date of visit occurrence)
     let visits = await db.get_visit(visit_id);
@@ -579,7 +593,7 @@ module.exports = {
     });
   },
   VisitCreateNew: async function (target_id, devname) {
-    logger.LogMessage(null, "VisitCreateNew called", logger.LOGLEVELS.DEBUG);
+    logger.debug(null, "VisitCreateNew called");
     // for an exisitng target, visit again (by default this uses the original device settings)
     return VisitCreate(target_id, devname)
     .then((visit) => {
@@ -629,10 +643,13 @@ module.exports = {
     return db.search_requests_and_responses(searchstring, perPage, currentPage);
   },
   TargetAdd: async function(submitted_url, devname) {
-    logger.LogMessage(null, "TargetAdd called", logger.LOGLEVELS.DEBUG);
-    let parsed = url.parse(submitted_url);
+    logger.debug(null, "TargetAdd called");
+    let parsed = new URL(submitted_url);
     if (parsed.protocol && ["http:", "https:", "data:"].indexOf(parsed.protocol) < 0) {
-        throw "Invalid protocol";
+      throw "Invalid protocol";
+    } else if (!parsed.protocol) {
+      // reject if no protocol
+      throw "Protocol is required";
     }
 
     let submittime = moment();
@@ -644,7 +661,7 @@ module.exports = {
       target = target[0];
     }
 
-    logger.LogMessage(null, `Creating visit from target ${target.target_id}`, logger.LOGLEVELS.DEBUG);
+    logger.debug(null, `Creating visit from target ${target.target_id}`);
     let visit = await VisitCreate(target.target_id, devname);
 
     if (!visit) {

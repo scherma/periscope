@@ -10,18 +10,28 @@ const LOGLEVELS = {
   DEBUG: 1
 };
 
+const LOGLEVELNAMES = {
+  1: "DEBUG",
+  2: "INFO",
+  3: "WARN",
+  4: "ERROR",
+  5: "FATAL"
+};
+
 const BASELOG = "/usr/local/unsafehex/periscope/data/logs/core.log";
   
-let CURRENTLOGLEVEL = options.loglevel ? options.loglevel : LOGLEVELS.ERROR;
+let CURRENTLOGLEVEL = options.loglevel ? options.loglevel : LOGLEVELS.INFO;
 
 let LogMessage = async function(logfile, message, loglevel) {
   // only write if logfile is not null
-  if (logfile && loglevel >= CURRENTLOGLEVEL) {
+  if (loglevel >= CURRENTLOGLEVEL) {
     if (loglevel >= LOGLEVELS.ERROR) {
       console.error(message);
+    } else {
+      console.log(message);
     }
     let ts = moment().format("YYYY-MM-DD HH:mm:ss");
-    message = `${ts} - ${message}`;
+    message = `${ts} - ${LOGLEVELNAMES[loglevel]} - ${message}`;
     if (logfile) {
       fs.appendFile(logfile, message + "\n", function (e) {
       });
@@ -33,5 +43,21 @@ let LogMessage = async function(logfile, message, loglevel) {
 
 module.exports = {
   LogMessage: LogMessage,
-  LOGLEVELS: LOGLEVELS
+  debug: async function(logfile, message) {
+    LogMessage(logfile, message, LOGLEVELS.DEBUG);
+  },
+  info: async function(logfile, message) {
+    LogMessage(logfile, message, LOGLEVELS.INFO);
+  },
+  warn: async function(logfile, message) {
+    LogMessage(logfile, message, LOGLEVELS.WARN);
+  },
+  error: async function(logfile, message) {
+    LogMessage(logfile, message, LOGLEVELS.ERROR);
+  },
+  fatal: async function(logfile, message) {
+    LogMessage(logfile, message, LOGLEVELS.FATAL);
+  },
+  LOGLEVELS: LOGLEVELS,
+  LOGLEVELNAMES: LOGLEVELNAMES
 }

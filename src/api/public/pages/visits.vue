@@ -19,7 +19,7 @@
       </b-col>
       <b-col lg="6">
         <div class="img-wrapper">
-          <img :src="'/visits/' + visit.visit_id + '/thumbnail'" class="thumbnail">
+          <img :src="`/visits/${visit.visit_id}/thumbnail`" class="thumbnail" blank="/images/placeholder.svg">
         </div>
       </b-col>
     </b-row>
@@ -62,9 +62,9 @@
 
 <script>
 module.exports = {
+  title: "Visits",
   data: function() {
     return {
-      title: "Visits",
       page: 1,
       visits: null,
       url: null,
