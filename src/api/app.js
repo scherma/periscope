@@ -6,6 +6,7 @@ var logger = require('morgan');
 var indexRouter = require('./routes/index');
 
 var app = express();
+app.set('x-powered-by', false);
 const server = require("http").Server(app);
 const io = require('socket.io')(server, { allowEIO3: true });
 

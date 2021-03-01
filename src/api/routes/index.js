@@ -15,7 +15,7 @@ router.get("/targets", function(req, res, next) {
   .then((rows) => {
     res.send(rows);
   }).catch((err) => {
-    console.log(err.message);
+    logger.error(null, err.message);
     res.status = 400;
     res.send(err);
   });
@@ -38,13 +38,14 @@ router.get("/targets/:id", function(req, res, next) {
 router.post("/targets/add", function(req, res, next) {
   manager.TargetAdd(req.body.url, req.query.devname)
   .then((visit) => {
+    logger.info(visit);
     res.send({
       visit
     });
   }).catch((err) => {
-    console.log(err.message);
-    res.status = 400;
-    res.send(err);
+    logger.error(null, err.message);
+    res.status(400);
+    res.send(err.message);
   });
 });
 
@@ -150,7 +151,7 @@ router.get("/visits/:id", function(req, res, next) {
       });
     }
   }).catch((err) => {
-    console.log(err.message);
+    logger.error(null, err.message);
     res.status(400);
     res.send(err);
   });
@@ -159,14 +160,10 @@ router.get("/visits/:id", function(req, res, next) {
 router.get("/visits/:id/screenshot", function(req, res, next) {
   manager.VisitBase(parseInt(req.params.id))
   .then((visit) => {
-    if (visit) {
+    if (visit && visit.screenshot_path) {
       res.redirect(visit.screenshot_path);
     } else {
-      res.status(404);
-      res.send({ 
-        message: `No visits matching id`,
-        request_id: req.params.id
-      });
+      res.redirect("/images/placeholder.svg");
     }
   }).catch((err) => {
     logger.error(null, err.message);
@@ -218,6 +215,11 @@ router.get("/search", function (req, res, next) {
     res.status(400);
     res.send(err);
   });
+});
+
+router.post("/brew", function (req, res, next) {
+  res.status(418);
+  res.send({height: "short", width: "stout"});
 });
 
 module.exports = router;

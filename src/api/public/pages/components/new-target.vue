@@ -1,7 +1,7 @@
 <template>
   <b-form id="newTarget">
     <b-row id="new-target">
-      <b-col cols="12"><b-alert variant="danger" dismissible v-model="addError" fade>Error adding new target</b-alert></b-col>
+      <b-col cols="12"><b-alert variant="danger" dismissible v-model="addError" fade>Error adding new target: {{errorMessage}}</b-alert></b-col>
       <b-col md="11">
         <label class="sr-only" for="url">URL</label>
         <b-input name="url" type="text" id="url" required placeholder="Sandbox new URL" v-model="form.url"></b-input>
@@ -30,22 +30,29 @@ module.exports = {
       form: {
         url: ''
       },
-      addError: false
+      addError: false,
+      errorMessage: null
     }
   },
   methods: {
     submit: async function() {
-      let result = await axios({
+      axios({
         method: "post",
         url: "/targets/add",
-        data: this.form
-      });
-      if (result && result.data && result.data.visit && result.data.visit.visit_id) {
-        let path = `/visit/${result.data.visit.visit_id}`;
-        router.push(path);
-      } else {
+        data: this.form,
+        errorHandle: false
+      }).then((result) => {
+        if (result && result.data && result.data.visit && result.data.visit.visit_id) {
+          let path = `/visit/${result.data.visit.visit_id}`;
+          router.push(path);
+        } else {
+          this.addError = true;
+          this.errorMessage = result.message;
+        }
+      }).catch((err) => {
         this.addError = true;
-      }
+        this.errorMessage = err.response.data;
+      });
     }
   },
   computed: {

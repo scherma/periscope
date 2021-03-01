@@ -447,6 +447,7 @@ let stitch_results = function(reqs, responses) {
 
   let data = {
     requests: {},
+    requests_sorted: [],
     summary: {
       total_response_data: 0,
       total_load_time: null
@@ -465,6 +466,7 @@ let stitch_results = function(reqs, responses) {
       data.requests[req_header.request_id].request_headers.push({[req_header.header_name]: req_header.header_value});
     } else {
       data.requests[req_header.request_id] = {
+        request_id: req_header.request_id,
         request_time: req_header.request_time,
         request_url: req_header.request_url,
         request_method: req_header.request_method,
@@ -502,6 +504,14 @@ let stitch_results = function(reqs, responses) {
     if (moment(resp_header.response_time) > loadend || !loadend) {
       loadend = moment(resp_header.response_time);
     }
+  });
+
+  let request_ids = Object.keys(data.requests);
+
+  let request_ids_sorted = request_ids.sort((a, b) => (data.requests[a].request_time > data.requests[b].request_time) ? 1 : -1);
+
+  request_ids_sorted.forEach((id) => {
+    data.requests_sorted.push(data.requests[id]);
   });
 
   data.summary.total_response_data = prettyBytes(data.summary.total_response_data);
@@ -645,18 +655,21 @@ module.exports = {
   TargetAdd: async function(submitted_url, devname) {
     logger.debug(null, "TargetAdd called");
     let parsed = new URL(submitted_url);
+    logger.info(parsed);
     if (parsed.protocol && ["http:", "https:", "data:"].indexOf(parsed.protocol) < 0) {
-      throw "Invalid protocol";
+      logger.error(null, `Invalid protocol supplied in URL "${submitted_url}"`);
+      throw {message: "Invalid protocol"};
     } else if (!parsed.protocol) {
       // reject if no protocol
-      throw "Protocol is required";
+      logger.error(null, `No protocol supplied in URL "${submitted_url}"`);
+      throw {message: "Protocol is missing"};
     }
 
     let submittime = moment();
     let target = await db.add_target(submitted_url, submittime);
     
     if (!target) {
-      throw "Creation of target entry failed";
+      throw {message: "Creation of target entry failed"};
     } else {
       target = target[0];
     }
@@ -665,7 +678,7 @@ module.exports = {
     let visit = await VisitCreate(target.target_id, devname);
 
     if (!visit) {
-      throw "Creation of visit entry failed";
+      throw {message: "Creation of visit entry failed"};
     } else {
       visit = visit[0];
       visit = VisitRun(visit.visit_id);

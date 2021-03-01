@@ -11,15 +11,21 @@
     <b-row class="visit-row" v-for="visit in visits" :key="visit.visit_id">
       <b-col class="longdata" lg="6">
         <b-row>
-          <b-col><router-link :to="'/visit/' + visit.visit_id">{{visit.query}}</router-link></b-col>
+          <b-col><router-link :to="`/visit/${visit.visit_id}`">{{visit.query}}</router-link></b-col>
         </b-row>
         <b-row>
           <b-col>{{visit.time_actioned}}</b-col>
         </b-row>
+        <b-row>
+          <b-col>&nbsp;</b-col>
+        </b-row>
+        <b-row>
+          <b-col>Status: <span :class="visit.status">{{visit.status}}</span></b-col>
+        </b-row>
       </b-col>
-      <b-col lg="6">
+      <b-col lg="6" class="imgcol">
         <div class="img-wrapper">
-          <img :src="`/visits/${visit.visit_id}/thumbnail`" class="thumbnail" blank="/images/placeholder.svg">
+          <b-img :src="`/visits/${visit.visit_id}/thumbnail`" class="thumbnail"></b-img>
         </div>
       </b-col>
     </b-row>
@@ -35,6 +41,7 @@
 <style scoped>
 .img-wrapper {
   max-width: 100%;
+  display: flex;
 }
 
 .visit-row {
@@ -49,13 +56,21 @@
   padding: 10px 0 10px 0;
 }
 
-@media (max-width: 975px) {
-  .img-wrapper {
-    display: block;
-  }
+.failed {
+  color: firebrick;
+}
 
-  img.thumbnail {
-    margin: 10px auto 5px auto;
+@media (min-width: 992px) {
+  .thumbnail {
+    max-width: 200px;
+    margin: 0px 0px 0px auto;
+  }
+}
+
+@media (max-width: 991px) {
+  .thumbnail {
+    max-width: 100%;
+    margin: 0px auto 0px auto;
   }
 }
 </style>
