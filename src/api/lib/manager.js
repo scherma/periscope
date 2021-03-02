@@ -13,6 +13,7 @@ const logger = require("./logger");
 const { isNull } = require("util");
 const prettyBytes = require("pretty-bytes");
 const websockets = require('../routes/websocket');
+const puppeteer = require('puppeteer');
 
 // allows certificate errors to be automatically be accepted
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -351,8 +352,11 @@ let Visit = async function(visit) {
         });
       });
       logger.debug(visit.errorlog, "Adding DFPM detections to DB");
-      db.set_status(visit.visit_id, `Writing DFPM to DB`).then(() => {});
-      db.add_dfpm(dfpm_detections).then(() => {  
+
+      Promise.all([
+        db.set_status(visit.visit_id, `Writing DFPM to DB`),
+        db.add_dfpm(dfpm_detections)
+      ]).then(() => {  
         db.set_status(visit.visit_id, "complete").then(() => {
           websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', 'complete');
         });
