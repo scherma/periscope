@@ -232,21 +232,28 @@ let VisitTarget = async function(visit) {
     let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
 
     // generate window view and convert it to thumbnail
-    logger.debug(visit.errorlog, `Generating windowed screenshot to ${screenshot_window_path}`);
-    await page.screenshot({path: screenshot_window_path});
+    try {
+      logger.debug(visit.errorlog, `Generating windowed screenshot to ${screenshot_window_path}`);
+      await page.screenshot({path: screenshot_window_path});
 
-    gm(screenshot_window_path)
-    .resize(null, 250)
-    .write(screenshot_window_path, function(err) {
-      if (err) {
-        logger.error(visit.errorlog, `Failed to write thumbnail for ${visit.visit_id}: ${err.message}`);
-      }
-    });
+      gm(screenshot_window_path)
+      .resize(null, 250)
+      .write(screenshot_window_path, function(err) {
+        if (err) {
+          logger.error(visit.errorlog, `Failed to resize thumbnail for ${visit.visit_id}: ${err.message}`);
+        }
+      });
+    } catch (err) {
+      logger.error(visit.errorlog, `Error capturing windowed screenshot for ${visit.visit_id}: ${err.message}`);
+    }
 
     // generate screenshot of entire page
-    logger.debug(visit.errorlog, `Generating screenshot to ${screenshot_file_path}`);
-
-    await page.screenshot({path: screenshot_file_path, fullPage: true});
+    try {
+      logger.debug(visit.errorlog, `Generating screenshot to ${screenshot_file_path}`);
+      await page.screenshot({path: screenshot_file_path, fullPage: true});  
+    } catch (err) {
+      logger.error(visit.errorlog, `Error capturing full page screenshot for ${visit.visit_id}: ${err.message}`);
+    }
 
     await db.set_status(visit.visit_id, "Writing files");
 
