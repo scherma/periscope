@@ -43,7 +43,7 @@ function prep_directories() {
     mkdir /usr/local/unsafehex
     mkdir /usr/local/unsafehex/periscope
     mkdir /usr/local/unsafehex/periscope/data
-	rsync -r --info=progress2 "$SCRIPTDIR/src/periscope/"* "/usr/local/unsafehex/periscope/"
+	rsync -r --info=progress2 "$SCRIPTDIR/src/"* "/usr/local/unsafehex/periscope/"
 
     echo "{
         \"dbname\": \"periscope\",
@@ -52,11 +52,15 @@ function prep_directories() {
     }" > /usr/local/unsafehex/periscope/api/lib/options.json
 
     # install nodejs dependencies
+    npm i sass -g --save
     cd /usr/local/unsafehex/periscope
     npm i --save
     cd /usr/local/unsafehex/periscope/api/lib
     git clone https://github.com/freethenation/DFPM/
     npm i --save
+
+    # build CSS
+    sass $SCRIPTDIR/src/main.scss /usr/local/unsafehex/periscope/api/public/stylesheets/style.css
 
     chown -R $LABUSER:$LABUSER /usr/local/unsafehex
 }
