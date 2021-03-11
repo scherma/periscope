@@ -55,12 +55,16 @@ function prep_directories() {
     npm i sass -g --save
     cd /usr/local/unsafehex/periscope
     npm i --save
+    # install UI JS dependencies
+    cd /usr/local/unsafehex/periscope/api/public
+    npm i --save
+    # install dfpm dependencies
     cd /usr/local/unsafehex/periscope/api/lib
     git clone https://github.com/freethenation/DFPM/
     npm i --save
 
     # build CSS
-    sass $SCRIPTDIR/src/main.scss /usr/local/unsafehex/periscope/api/public/stylesheets/style.css
+    sass /usr/local/unsafehex/periscope/api/public/main.scss /usr/local/unsafehex/periscope/api/public/stylesheets/style.css
 
     chown -R $LABUSER:$LABUSER /usr/local/unsafehex
 }
