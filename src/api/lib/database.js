@@ -162,14 +162,15 @@ module.exports = {
     .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
   },
   list_targets: function(perPage=20, currentPage=1) {
-    return pg("targets").select("*").orderBy("targets.target_id", "desc").paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    return pg("targets").select("targets.*")
+    .count("visits.*")
+    .leftJoin("visits", "targets.target_id", "visits.target_id")
+    .groupBy("targets.target_id")
+    .orderBy("targets.target_id", "desc").paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
   },
   list_target_visits: function(target_id, perPage=20, currentPage=1) {
-    return pg("targets").select(
-      "targets.target_id",
-      "targets.query",
-      "visits.*"
-    ).leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id})
+    return pg("targets").select("targets.target_id", "targets.query", "visits.*")
+    .leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id})
     .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
   },
   set_status: function(visit_id, status) {
