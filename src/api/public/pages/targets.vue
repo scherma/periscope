@@ -10,10 +10,19 @@
   <b-container fluid>
     <b-row class="target-row" v-for="target in targets" :key="target.target_id">
       <b-col class="longdata mt-2 mb-2" lg="10">
-        <router-link :to="'/targets/' + target.target_id">{{target.query}}</router-link>
+        <b-row>
+          <b-col><router-link :to="'/targets/' + target.target_id">{{target.query}}</router-link></b-col>
+        </b-row>
+        <b-row>
+          <b-col class="datetext">Created: {{moment(target.createtime).format("YYYY-MM-DD HH:mm:ss")}} - Visits: {{target.count}}</b-col>
+        </b-row>
       </b-col>
       <b-col lg="2" class="mt-2 mb-2">
-        <re-run :targetID="target.target_id" right @visit-rerun="loadVisit"></re-run>
+        <b-row class="h-100" align-v="center">
+          <b-col>
+            <re-run :targetID="target.target_id" right @visit-rerun="loadVisit"></re-run>
+          </b-col>
+        </b-row>
       </b-col>
     </b-row>
   </b-container>
@@ -37,6 +46,7 @@
 .pagenav {
   padding: 10px 0 10px 0;
 }
+
 </style>
 
 <script>

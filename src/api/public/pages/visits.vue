@@ -14,13 +14,13 @@
           <b-col><router-link :to="`/visit/${visit.visit_id}`">{{visit.query}}</router-link></b-col>
         </b-row>
         <b-row>
-          <b-col>{{visit.time_actioned}}</b-col>
+          <b-col class="datetext">{{moment(visit.time_actioned).format("YYYY-MM-DD HH:mm:ss")}}</b-col>
         </b-row>
         <b-row>
           <b-col>&nbsp;</b-col>
         </b-row>
         <b-row>
-          <b-col>Status: <span :class="visit.status">{{visit.status}}</span></b-col>
+          <b-col class="datetext">Status: <span :class="visit.status">{{visit.status}}</span></b-col>
         </b-row>
       </b-col>
       <b-col lg="6" class="imgcol">
@@ -54,10 +54,6 @@
 
 .pagenav {
   padding: 10px 0 10px 0;
-}
-
-.failed {
-  color: firebrick;
 }
 
 @media (min-width: 992px) {

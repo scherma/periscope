@@ -14,7 +14,10 @@
           <b-col><router-link :to="'/visit/' + visit.visit_id">{{visit.query}}</router-link></b-col>
         </b-row>
         <b-row>
-          <b-col>{{visit.time_actioned}}</b-col>
+          <b-col class="datetext">{{moment(visit.time_actioned).format("YYYY-MM-DD HH:mm:ss")}}</b-col>
+        </b-row>
+        <b-row>
+          <b-col class="datetext">Status: <span :class="visit.status">{{ visit.status }}</span></b-col>
         </b-row>
       </b-col>
       <b-col class="mt-2 mb-2" lg="6">

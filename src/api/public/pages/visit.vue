@@ -27,10 +27,10 @@
               <b-col lg="2" class="font-weight-bold">Visit ID</b-col><b-col lg="10">{{ visitData.visit.visit_id }}</b-col>
             </b-row>
             <b-row>
-              <b-col lg="2" class="font-weight-bold">Created</b-col><b-col lg="10">{{ visitData.visit.createtime }}</b-col>
+              <b-col lg="2" class="font-weight-bold">Created</b-col><b-col lg="10">{{ moment(visitData.visit.createtime).format("YYYY-MM-DD HH:mm:ss") }}</b-col>
             </b-row>
             <b-row>
-              <b-col sm="2" class="font-weight-bold">Processed</b-col><b-col lg="10">{{ visitData.visit.time_actioned }}</b-col>  
+              <b-col sm="2" class="font-weight-bold">Processed</b-col><b-col lg="10">{{ moment(visitData.visit.time_actioned).format("YYYY-MM-DD HH:mm:ss") }}</b-col>  
             </b-row>
             <b-row>
               <b-col lg="2" class="font-weight-bold">Status</b-col><b-col lg="10">{{ visitData.visit.status }}</b-col>

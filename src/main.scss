@@ -54,6 +54,15 @@ body {
   padding: 0.75rem !important;
 }
 
+.datetext {
+  color: #666666;
+  font-size: small;
+}
+
+.failed {
+  color: firebrick;
+}
+
 @media (max-width: 991px) {
   .main-content {
     padding: 0;
