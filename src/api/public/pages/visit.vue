@@ -351,6 +351,7 @@ module.exports = {
       this.joinRoom();
     },
     joinRoom: function() {
+      console.log(`calling joinRoom with visit/${this.$route.params.id}`);
       this.$socket.emit('joinRoom', `visit/${this.$route.params.id}`);
     },
     loadThumb: async function() {

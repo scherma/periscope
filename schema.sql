@@ -27,6 +27,7 @@ CREATE TABLE requests (
 CREATE TABLE request_headers (
     header_id SERIAL PRIMARY KEY,
     request_id integer,
+    visit_id integer,
     header_name text,
     header_value text
     );
@@ -45,6 +46,7 @@ CREATE TABLE responses (
 CREATE TABLE response_headers (
     header_id SERIAL PRIMARY KEY,
     response_id integer,
+    visit_id integer,
     header_name text,
     header_value text
     );
@@ -66,7 +68,9 @@ ALTER TABLE ONLY requests ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFEREN
 ALTER TABLE ONLY responses ADD CONSTRAINT request_id FOREIGN KEY (request_id) REFERENCES requests(request_id);
 ALTER TABLE ONLY responses ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 ALTER TABLE ONLY request_headers ADD CONSTRAINT request_id FOREIGN KEY (request_id) REFERENCES requests(request_id);
+ALTER TABLE ONLY request_headers ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 ALTER TABLE ONLY response_headers ADD CONSTRAINT response_id FOREIGN KEY (response_id) REFERENCES responses(response_id);
+ALTER TABLE ONLY response_headers ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 ALTER TABLE ONLY dfpm_detections ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 
 CREATE INDEX ON targets USING gin ( to_tsvector('english', query) );
