@@ -20,19 +20,26 @@ if [ -z "$(getent passwd "$LABUSER")" ]; then
 fi
 
 read -s -p "Set database password: " DBPASS
-read -p "If your environment requires a proxy, please provide the address (e.g. http://192.168.14.4:3128): " LABPROXY
+read -p "Enter the URL your app will be accessed at (needed for setting up websocket connection)" APPURL
 echo -e "${GREEN}Proceeding with URL sandbox installation${NC}"
 
 SCRIPTDIR=$(dirname "$(realpath "$0")")
 
 function install_periscope_dependencies() {
-	echo -e "${GREEN}Running basic updates...${NC}"
+    echo -e "${GREEN}Running basic updates...${NC}"
     dnf update -y
 
     # install basic tools
     dnf install -y nginx tcpdump wget net-tools curl epel-release yum-utils rsync nodejs postgresql-server postgresql-contrib 
     # install chrome dependencies
-    dnf install -y GraphicsMagick atk gtk3 alsa-lib-devel libXScrnSaver libXtst libXdamage libxComposite libX11 mesa-libgbm libxshmfence
+    dnf install -y GraphicsMagick atk gtk3 alsa-lib-devel libXScrnSaver libXtst libXdamage libXcomposite libX11 mesa-libgbm libxshmfence
+    dnf install -y libnss3 libatk-1.0.so.0 libatk-bridge-2.0.so.0 libcups.so.2 libXcomposite.so.1 libXdamage.so.1 libXext.so.6
+    dnf install -y libcups.so.2 libXcomposite.so.1 libXdamage.so.1 libXrandr.so.2 libgbm.so.1 libgtk-3.so.0 libgdk-3.so.0 libpango-1.0.so.0 
+    dnf install -y libcairo.so.2 libasound.so.2 libxshmfence.so.1 alsa-lib.x86_64 atk.x86_64 cups-libs.x86_64 gtk3.x86_64 libXcomposite.x86_64 
+    dnf install -y libXcursor.x86_64 libXdamage.x86_64 libXext.x86_64 libXi.x86_64 libXrandr.x86_64 libXScrnSaver.x86_64 libXtst.x86_64 
+    dnf install -y pango.x86_64 xorg-x11-fonts-100dpi xorg-x11-fonts-75dpi xorg-x11-fonts-cyrillic xorg-x11-fonts-misc xorg-x11-fonts-Type1 
+    dnf install -y xorg-x11-utils mesa-libgbm libxshmfence-1.3-2.el8.x86_64
+
     
 }
 
@@ -40,7 +47,7 @@ function prep_directories() {
     mkdir /usr/local/unsafehex
     mkdir /usr/local/unsafehex/periscope
     mkdir /usr/local/unsafehex/periscope/data
-	rsync -r --info=progress2 "$SCRIPTDIR/src/"* "/usr/local/unsafehex/periscope/"
+    rsync -r --info=progress2 "$SCRIPTDIR/src/"* "/usr/local/unsafehex/periscope/"
 
     echo "{
         \"dbname\": \"periscope\",
@@ -48,10 +55,7 @@ function prep_directories() {
         \"dbpass\": \"$DBPASS\"
     }" > /usr/local/unsafehex/periscope/api/lib/options.json
 
-    if [ -z "$LABPROXY" ]; then
-        npm config set proxy $LABPROXY
-        npm config set https-proxy $LABPROXY
-    fi
+    sed -e "s/yourdomain/$APPURL/" "$SCRIPTDIR/src/api/public/index.html" > /usr/local/unsafehex/periscope/api/public/index.html
 
     # install nodejs dependencies
     npm i sass pm2 -g --save
@@ -86,7 +90,8 @@ function configure_periscope_db() {
 
     su -c "psql -c \"CREATE USER $LABUSER WITH PASSWORD '$DBPASS';\"" postgres
     su -c "psql -c \"CREATE DATABASE periscope;\"" postgres
-    su -c "psql -q periscope < $SCRIPTDIR/schema.sql" postgres
+    su -c "psql -c \"ALTER DATABASE periscope OWNER TO $LABUSER;\"" postgres
+    su -c "psql -q periscope < $SCRIPTDIR/schema.sql" $LABUSER
 }
 
 function start_periscope() {
