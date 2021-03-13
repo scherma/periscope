@@ -21,7 +21,7 @@ CREATE TABLE requests (
     request_time timestamp with time zone,
     request_post_data text,
     request_url text,
-    request_method text,
+    request_method text
     );
 
 CREATE TABLE request_headers (

@@ -1,3 +1,5 @@
+#!/bin/bash
+
 if [[ $EUID -ne 0 ]]; then
     echo "This script must be run as root"
     exit 1
@@ -18,6 +20,7 @@ if [ -z "$(getent passwd "$LABUSER")" ]; then
 fi
 
 read -s -p "Set database password: " DBPASS
+read -p "If your environment requires a proxy, please provide the address (e.g. http://192.168.14.4:3128): " LABPROXY
 echo -e "${GREEN}Proceeding with URL sandbox installation${NC}"
 
 SCRIPTDIR=$(dirname "$(realpath "$0")")
@@ -31,12 +34,6 @@ function install_periscope_dependencies() {
     # install chrome dependencies
     dnf install -y GraphicsMagick atk gtk3 alsa-lib-devel libXScrnSaver libXtst libXdamage libxComposite libX11 mesa-libgbm libxshmfence
     
-    # set postgres to use tcp socket auth with password instead of unix socket (needed by knex/pg)
-    sed -r 's/^(host.*127.0.0.1\/32\s+) ident/\1 md5/' /var/lib/pgsql/data/pg_hba.conf > /var/lib/pgsql/9.6/data/pg_hba.conf
-    sed -r 's/^(host.*::1\/128\s+) ident/\1 md5/' /var/lib/pgsql/data/pg_hba.conf > /var/lib/pgsql/9.6/data/pg_hba.conf
-
-    systemctl enable --now postgresql
-    systemctl restart postgresql
 }
 
 function prep_directories() {
@@ -51,42 +48,53 @@ function prep_directories() {
         \"dbpass\": \"$DBPASS\"
     }" > /usr/local/unsafehex/periscope/api/lib/options.json
 
-    # install nodejs dependencies
-    npm i sass -g --save
-    cd /usr/local/unsafehex/periscope
-    npm i --save
-    # install UI JS dependencies
-    cd /usr/local/unsafehex/periscope/api/public
-    npm i --save
-    # install dfpm dependencies
-    cd /usr/local/unsafehex/periscope/api/lib
-    git clone https://github.com/freethenation/DFPM/
-    npm i --save
+    if [ -z "$LABPROXY" ]; then
+        npm config set proxy $LABPROXY
+        npm config set https-proxy $LABPROXY
+    fi
 
-    # build CSS
-    sass /usr/local/unsafehex/periscope/api/public/main.scss /usr/local/unsafehex/periscope/api/public/stylesheets/style.css
+    # install nodejs dependencies
+    npm i sass pm2 -g --save
 
     chown -R $LABUSER:$LABUSER /usr/local/unsafehex
+
+    cd /usr/local/unsafehex/periscope
+    su -c "npm i --save" $LABUSER
+    # install UI JS dependencies
+    cd /usr/local/unsafehex/periscope/api/public
+    su -c "npm i --save" $LABUSER
+    # install dfpm dependencies
+    cd /usr/local/unsafehex/periscope/api/lib
+    su -c "git clone https://github.com/freethenation/DFPM/" $LABUSER
+    su -c "npm i --save" $LABUSER
+
+    # build CSS
+    su -c "/usr/local/bin/sass /usr/local/unsafehex/periscope/api/public/main.scss /usr/local/unsafehex/periscope/api/public/stylesheets/style.css" $LABUSER
+
 }
 
 function configure_periscope_db() {
-	echo -e "${GREEN}Configuring database...${NC}"
-    postgresql-setup initdb
-	su -c "psql -c \"CREATE USER $LABUSER WITH PASSWORD '$DBPASS';\"" postgres
-	su -c "psql -c \"CREATE DATABASE periscope;\"" postgres
-	su -c "psql -q periscope < $SCRIPTDIR/schema.sql" $LABUSER
+    echo -e "${GREEN}Configuring database...${NC}"
+    postgresql-setup --initdb --unit postgresql
+    
+    # set postgres to use tcp socket auth with password instead of unix socket (needed by knex/pg)
+    mv /var/lib/pgsql/data/pg_hba.conf /var/lib/pgsql/data/pg_hba.conf.default
+    sed -e 's/\(host.*127.0.0.1\/32.*\) ident/\1 md5/' /var/lib/pgsql/data/pg_hba.conf.default | sed -e 's/\(host.*::1\/128.*\) ident/\1 md5/' > /var/lib/pgsql/data/pg_hba.conf
+
+    systemctl enable --now postgresql
+    systemctl restart postgresql
+
+    su -c "psql -c \"CREATE USER $LABUSER WITH PASSWORD '$DBPASS';\"" postgres
+    su -c "psql -c \"CREATE DATABASE periscope;\"" postgres
+    su -c "psql -q periscope < $SCRIPTDIR/schema.sql" postgres
 }
 
 function start_periscope() {
-    su -c "pm2 start /usr/local/unsafehex/periscope/api/bin/www --name periscope --time" $LABUSER
+    su -c "/usr/local/bin/pm2 start /usr/local/unsafehex/periscope/api/bin/www --name periscope --time" $LABUSER
 }
 
-INSTALL_CMDS=["install_periscope_dependencies", "configure_periscope_db", "prep_directories", "start_periscope"]
+install_periscope_dependencies
+configure_periscope_db
+prep_directories
+start_periscope
 
-for cmd in "${INSTALL_CMDS[@]}"; do
-	cmd
-	if [ fail -eq 1 ]; then
-		echo -e "${RED}Errors occurred and the installation has failed. See previous output for details. Aborting.${NC}"
-		exit 1
-	fi
-done
