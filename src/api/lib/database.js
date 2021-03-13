@@ -46,15 +46,15 @@ module.exports = {
   add_requests: async function(requests, visit_id) {
     let req_sql = "WITH req(visit_id, request_time, request_post_data, request_url, request_method) AS (VALUES (?::integer, ?::timestamp with time zone, ?, ?, ?)), " +
     "req_h(header_name, header_value) AS (SELECT header_name, header_value FROM headers_to_rows(?)), " +
-    "ir AS (INSERT INTO requests(visit_id, request_time, request_post_data, request_url, request_method) SELECT * FROM req RETURNING request_id) " +
-    "INSERT INTO request_headers(request_id, header_name, header_value) SELECT ir.request_id, req_h.header_name, req_h.header_value FROM ir, req_h " +
+    "ir AS (INSERT INTO requests(visit_id, request_time, request_post_data, request_url, request_method) SELECT * FROM req RETURNING request_id, visit_id) " +
+    "INSERT INTO request_headers(request_id, visit_id, header_name, header_value) SELECT ir.request_id, ir.visit_id, req_h.header_name, req_h.header_value FROM ir, req_h " +
     "RETURNING *";
     
     let resp_sql = "WITH resp(request_id, visit_id, file_id, response_time, response_size, response_code, response_data_length) " +
     "AS (VALUES (?::integer, ?::integer, ?::integer, ?::timestamp with time zone, ?::integer, ?::integer, ?::integer)), " +
     "resp_h(header_name, header_value) AS (SELECT header_name, header_value FROM headers_to_rows(?)), " +
-    "ir AS (INSERT INTO responses(request_id, visit_id, file_id, response_time, response_size, response_code, response_data_length) SELECT * FROM resp RETURNING response_id) " +
-    "INSERT INTO response_headers(response_id, header_name, header_value) SELECT ir.response_id, resp_h.header_name, resp_h.header_value FROM ir, resp_h";
+    "ir AS (INSERT INTO responses(request_id, visit_id, file_id, response_time, response_size, response_code, response_data_length) SELECT * FROM resp RETURNING response_id, visit_id) " +
+    "INSERT INTO response_headers(response_id, visit_id, header_name, header_value) SELECT ir.response_id, ir.visit_id, resp_h.header_name, resp_h.header_value FROM ir, resp_h";
 
     let reqrows = 0;
     let resprows = 0;
@@ -195,6 +195,28 @@ module.exports = {
       LEFT JOIN targets ON targets.target_id = visits.target_id \
       WHERE to_tsvector('English', rsph.header_value) @@ to_tsquery('English', ?) \
       OR to_tsvector('English', rsph.header_name) @@ to_tsquery('English', ?)) rspt", [searchterm, searchterm, searchterm, searchterm]))
-      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
+  },
+  search_requests: function(searchterm, perPage=20, currentPage=1) {
+    return pg.select("*").from(pg.raw("(SELECT count(*), visits.* FROM request_headers rqt \
+    LEFT JOIN requests rq ON rq.request_id = rqt.request_id \
+    LEFT JOIN visits ON visits.visit_id = rq.visit_id \
+    RIGHT JOIN targets ON visits.target_id = targets.target_id \
+    WHERE to_tsvector('English', rqt.header_value) @@ to_tsquery('English', ?) \
+    OR to_tsvector('English', rqt.header_name) @@ to_tsquery('English', ?) \
+    GROUP BY visits.visit_id) rqt_entries", [searchterm, searchterm]))
+    .leftJoin("targets", "rqt_entries.target_id", "targets.target_id")
+    .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+  },
+  search_responses: function(searchterm, perPage=20, currentPage=1) {
+    return pg.select("*").from(pg.raw("(SELECT count(*), visits.* FROM response_headers rph \
+    LEFT JOIN responses rp ON rp.response_id = rph.response_id \
+    LEFT JOIN visits ON visits.visit_id = rp.visit_id \
+    RIGHT JOIN targets ON visits.target_id = targets.target_id \
+    WHERE to_tsvector('English', rph.header_value) @@ to_tsquery('English', ?) \
+    OR to_tsvector('English', rph.header_name) @@ to_tsquery('English', ?) \
+    GROUP BY visits.visit_id) rph_entries", [searchterm, searchterm]))
+    .leftJoin("targets", "rph_entries.target_id", "targets.target_id")
+    .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
   }
 }

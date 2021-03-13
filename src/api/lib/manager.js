@@ -661,6 +661,15 @@ module.exports = {
   },
   RequestSearch: async function(searchstring, perPage=20, currentPage=1) {
     // needs improvement. lots of improvement.
+    
+    let rqs = db.search_requests(searchstring, perPage, currentPage);
+    let rsps = db.search_responses(searchstring, perPage, currentPage);
+
+    Promise.all([rqs, rsps])
+    .then(([a, b]) => {
+
+    });
+
     return db.search_requests_and_responses(searchstring, perPage, currentPage);
   },
   TargetAdd: async function(submitted_url, devname) {
