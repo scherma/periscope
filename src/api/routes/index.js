@@ -15,7 +15,7 @@ router.get("/targets", function(req, res, next) {
   .then((rows) => {
     res.send(rows);
   }).catch((err) => {
-    logger.error(null, err.message);
+    logger.error(null, {message: err.message});
     res.status = 400;
     res.send(err);
   });
@@ -29,27 +29,31 @@ router.get("/targets/:id", function(req, res, next) {
   .then((rows) => {
     res.send(rows);
   }).catch((err) => {
-    console.log(err.message);
+    logger.error(null, {message: err.message});
     res.status = 400;
     res.send(err);
   });
 });
 
 router.post("/targets/add", function(req, res, next) {
+  let ua = req.headers['user-agent'] || "";
+  logger.info(null, {src: req.ip, target: req.body.url, device: req.query.devname, ua: ua, action: "add target"});
   manager.TargetAdd(req.body.url, req.query.devname)
   .then((visit) => {
-    logger.info(visit);
+    logger.info(null, {type: "", data: visit});
     res.send({
       visit
     });
   }).catch((err) => {
-    logger.error(null, err.message);
+    logger.error(null, {message: err.message});
     res.status(400);
     res.send(err.message);
   });
 });
 
 router.all("/targets/:id/new-visit", function(req, res, next) {
+  let ua = req.headers['user-agent'] || "";
+  logger.info(null, {src: req.ip, target_id: req.params.id, device: req.query.devname, ua: ua, action: "add visit"});
   manager.VisitCreateNew(parseInt(req.params.id), req.query.devname)
   .then((visit) => {
     if (visit) {
@@ -64,7 +68,7 @@ router.all("/targets/:id/new-visit", function(req, res, next) {
       });
     }
   }).catch((err) => {
-    logger.error(null, err.message);
+    logger.error(null, {message: err.message});
     res.status(400);
     res.send(err);
   });
@@ -78,7 +82,7 @@ router.all("/visits", function(req, res, next) {
   .then((rows) => {
     res.send(rows);
   }).catch((err) => {
-    logger.error(null, err.message);
+    logger.error(null, {message: err.message});
     res.status = 400;
     res.send(err);
   });
@@ -98,16 +102,16 @@ router.get("/visits/:visit_id/file/:fileno", function(req, res, next) {
           res.status(404);
           res.send(out_err);
         } else {
-          logger.error(null, err);
+          logger.error(null, {message: err});
           res.status(500);
           res.send(out_err);
         }
       } else {
         fs.unlink(filedata.path, function(err) {
           if (err) {
-            logger.error(null, err.toString());
+            logger.error(null, {message: err.toString()});
           } else {
-            logger.info(null, `Temp file ${filedata.path} deleted`);
+            logger.info(null, {message: `Temp file ${filedata.path} deleted`});
           }
         });
       }
@@ -151,7 +155,7 @@ router.get("/visits/:id", function(req, res, next) {
       });
     }
   }).catch((err) => {
-    logger.error(null, err.message);
+    logger.error(null, {message: err.message, action: "get visit"});
     res.status(400);
     res.send(err);
   });
@@ -166,7 +170,7 @@ router.get("/visits/:id/screenshot", function(req, res, next) {
       res.redirect("/images/placeholder.svg");
     }
   }).catch((err) => {
-    logger.error(null, err.message);
+    logger.error(null, {message: err.message, action: "get screenshot"});
     res.status(400);
     res.send(err);
   });
@@ -211,7 +215,7 @@ router.get("/search", function (req, res, next) {
     res.send(results);
   })
   .catch((err) => {
-    logger.error(null, err.message);
+    logger.error(null, {message: err.message, action: "search"});
     res.status(400);
     res.send(err);
   });

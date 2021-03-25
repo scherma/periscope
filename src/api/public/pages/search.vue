@@ -4,7 +4,7 @@
   </new-target>
   <b-row id="top-nav" class="pagenav">
     <b-col>
-      <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="page"></b-pagination-nav>
+      <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="pagination.currentPage"></b-pagination-nav>
     </b-col>
   </b-row>
   <b-container fluid>
@@ -17,7 +17,7 @@
         </b-row>
         <b-row class="">
           <b-col md="3" class="hlabel">Request URL</b-col>
-          <b-col md="9" class="htext">{{result.request_url}}</b-col>
+          <b-col md="9" class="htext">{{result.query}}</b-col>
         </b-row>
         <b-row>
           <b-col>
@@ -26,19 +26,19 @@
         </b-row>
         <b-row>
           <b-col md="3" class="hlabel">Visit {{result.visit_id}}</b-col>
-          <b-col md="6" class="htext">{{result.time_actioned}}</b-col>
+          <b-col md="6" class="htext">{{result.createtime}}</b-col>
         </b-row>
         <b-row>
-          <b-col md="3" class="hlabel">Header</b-col>
-          <b-col md="9" class="htext">{{result.header_name}}</b-col>
+          <b-col md="3" class="hlabel">Location</b-col>
+          <b-col md="9" class="htext">{{result.loc}}</b-col>
         </b-row>
         <b-row>
           <b-col md="3" class="hlabel">Value</b-col>
-          <b-col md="9" class="htext">{{result.header_value}}</b-col>
+          <b-col md="9" class="htext">{{result.hit}}</b-col>
         </b-row>
         <b-row>
-          <b-col md="3" class="hlabel">Found in</b-col>
-          <b-col md="9" class="htext">{{result.etype}}</b-col>
+          <b-col md="3" class="hlabel">Similarity</b-col>
+          <b-col md="9" class="htext">{{result.sml}}</b-col>
         </b-row>
       </b-col>
       <b-col lg="6">
@@ -50,7 +50,7 @@
   </b-container>
   <b-row id="bottom-nav" class="pagenav">
     <b-col>
-      <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="page"></b-pagination-nav>
+      <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="pagination.currentPage"></b-pagination-nav>
     </b-col>
   </b-row>
 </b-container>
@@ -98,16 +98,15 @@ module.exports = {
   data: function() {
     return {
       title: "Search",
-      page: 1,
-      pagesize: 20,
       results: null,
       searchTerm: null,
       pagination: {
-        from: null,
+        from: 0,
         to: null,
         lastPage: null,
-        perPage: null,
-        currentPage: 1
+        perPage: 20,
+        currentPage: 1,
+        total: null
       },
     }
   },
@@ -115,19 +114,23 @@ module.exports = {
     fetchResults: async function () {
       let data = await axios({
         method: "get",
-        url: `/search?page=${this.page}&q=${this.searchTerm}&pagesize=${this.pagesize}`,
+        url: `/search?page=${this.pagination.currentPage}&q=${this.searchTerm}&pagesize=${this.pagination.perPage}`,
       });
       this.results = data.data.data;
-      this.pagination = data.data.pagination;
+      this.pagination.from = data.data.pagination.from ? data.data.pagination.from : 0;
+      this.pagination.to = data.data.pagination.to ? data.data.pagination.to : this.pagination.to;
+      this.pagination.currentPage = data.data.pagination.currentPage ? data.data.pagination.currentPage : this.pagination.currentPage;
+      this.pagination.lastPage = data.data.pagination.lastPage ? data.data.pagination.lastPage : this.pagination.lastPage;
+      this.pagination.total = data.data.pagination.total ? data.data.pagination.total : this.pagination.total;
     },
     linkGen(pageNum) {
       return {
         path: '/search',
-        query: { page: pageNum, q: this.searchTerm, pagesize: this.pagesize }
+        query: { page: pageNum, q: this.searchTerm, pagesize: this.pagination.perPage }
       }
     },
     pageGen() {
-      return this.page;
+      return this.pagination.currentPage;
     }
   },
   computed: {
@@ -137,8 +140,8 @@ module.exports = {
     this.fetchResults();
   },
   beforeRouteUpdate(to, from, next) {
-    this.page = to.query.page;
-    this.pagesize = to.query.pagesize;
+    this.pagination.currentPage = to.query.page ? to.query.page : this.pagination.currentPage;
+    this.pagination.perPage = to.query.pagesize ? to.query.pagesize : this.pagination.perPage;
     this.searchTerm = to.query.q;
     this.fetchResults();
     next();

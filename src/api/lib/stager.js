@@ -7,7 +7,7 @@ let puppeteerPromise;
 function getPuppet() {
     // this is my browser. there are many like it, but this one is mine.
     if (puppeteerPromise) {
-        logger.debug(null, "Puppeteer exists, providing.");
+        logger.debug(null, {message: "Puppeteer exists, providing.", action: "getPuppet"});
         return puppeteerPromise;
     }
 
@@ -24,12 +24,12 @@ function getPuppet() {
         }
     )
     .then((browser) => {
-        logger.debug(null, "Spinning up DFPM");
+        logger.debug(null, {message: "Spinning up DFPM", action: "getPuppet"});
         dfpm.flipTheSwitch("127.0.0.1", 9222, true, false).then(() => {
             // allow time for it to load
             dfpm.sleep(5*1000).then(() => {});
            
-            logger.debug(null, "DFPM: We get signal.");
+            logger.debug(null, {message: "DFPM: We get signal.", action: "getPuppet"});
         });
 
         return browser;

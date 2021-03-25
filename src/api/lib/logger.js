@@ -23,20 +23,27 @@ const BASELOG = "/usr/local/unsafehex/periscope/data/logs/core.log";
 let CURRENTLOGLEVEL = options.loglevel ? options.loglevel : LOGLEVELS.INFO;
 
 let LogMessage = async function(logfile, message, loglevel) {
-  // only write if logfile is not null
   if (loglevel >= CURRENTLOGLEVEL) {
+    let ts = moment().format("YYYY-MM-DD HH:mm:ss.SSSZ");
+    message.level = LOGLEVELNAMES[loglevel];
+  
+    // format the message
+    let msgobject = {time: ts, ...message};
+    let message_str = JSON.stringify(msgobject);
+
+    // print to console
     if (loglevel >= LOGLEVELS.ERROR) {
-      console.error(message);
+      console.error(message_str);
     } else {
-      console.log(message);
+      console.log(message_str);
     }
-    let ts = moment().format("YYYY-MM-DD HH:mm:ss");
-    message = `${ts} - ${LOGLEVELNAMES[loglevel]} - ${message}`;
+
+    // only write if logfile is not null
     if (logfile) {
-      fs.appendFile(logfile, message + "\n", function (e) {
+      fs.appendFile(logfile, message_str + "\n", function (e) {
       });
     }
-    fs.appendFile(BASELOG, message + "\n", function (e) {
+    fs.appendFile(BASELOG, message_str + "\n", function (e) {
     });
   }
 }

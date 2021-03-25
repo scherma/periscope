@@ -47,6 +47,7 @@ function prep_directories() {
     mkdir /usr/local/unsafehex
     mkdir /usr/local/unsafehex/periscope
     mkdir /usr/local/unsafehex/periscope/data
+    mkdir /usr/local/unsafehex/periscope/data/logs
     rsync -r --info=progress2 "$SCRIPTDIR/src/"* "/usr/local/unsafehex/periscope/"
 
     echo "{
@@ -91,6 +92,7 @@ function configure_periscope_db() {
     su -c "psql -c \"CREATE USER $LABUSER WITH PASSWORD '$DBPASS';\"" postgres
     su -c "psql -c \"CREATE DATABASE periscope;\"" postgres
     su -c "psql -c \"ALTER DATABASE periscope OWNER TO $LABUSER;\"" postgres
+    su -c "psql -d periscope -c \"CREATE EXTENSION pg_trgm;\"" postgres
     su -c "psql -q periscope < $SCRIPTDIR/schema.sql" $LABUSER
 }
 

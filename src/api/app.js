@@ -7,6 +7,7 @@ var indexRouter = require('./routes/index');
 
 var app = express();
 app.set('x-powered-by', false);
+app.set('trust proxy', '192.168.40.2');
 const server = require("http").Server(app);
 const io = require('socket.io')(server, { allowEIO3: true });
 

@@ -74,8 +74,16 @@ ALTER TABLE ONLY response_headers ADD CONSTRAINT visit_id FOREIGN KEY (visit_id)
 ALTER TABLE ONLY dfpm_detections ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 
 CREATE INDEX ON targets USING gin ( to_tsvector('english', query) );
+CREATE INDEX targets_trgm ON targets USING GIN(query gin_trgm_ops);
 CREATE INDEX ON request_headers USING gin ( to_tsvector('english', header_value) );
+CREATE INDEX request_header_name_trgm ON request_headers USING GIN(header_name gin_trgm_ops);
+CREATE INDEX request_header_val_trgm ON request_headers USING GIN(header_value gin_trgm_ops);
 CREATE INDEX ON response_headers USING gin ( to_tsvector('english', header_value) );
+CREATE INDEX response_header_name_trgm ON response_headers USING GIN(header_name gin_trgm_ops);
+CREATE INDEX response_header_val_trgm ON response_headers USING GIN(header_value gin_trgm_ops);
+CREATE INDEX request_url_trgm ON requests USING GIN(request_url gin_trgm_ops);
+CREATE INDEX request_post_data_trgm ON requests USING GIN(request_post_data gin_trgm_ops);
+
 
 CREATE FUNCTION headers_to_rows(jsonb) RETURNS TABLE (header_name text, header_value text) AS $header_rows$
     SELECT e.key, a.value FROM jsonb_each($1) e, jsonb_array_elements_text(CASE WHEN jsonb_typeof(e.value)='array' THEN e.value ELSE jsonb_build_array(e.value) END) a;

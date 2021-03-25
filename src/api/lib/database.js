@@ -93,17 +93,21 @@ module.exports = {
           .catch((err) => {
             logger.error(
               null, 
-              [
-                reqs.rows[0].request_id, 
-                visit_id, 
-                request.file_id,
-                request.response_time, 
-                request.response_size, 
-                request.response_code, 
-                request.response_body.length, 
-                request.response_headers
-              ]);
-            logger.error(null, err.message);
+              { 
+                message: err.message, 
+                action: "add_requests",
+                sub_action: "add response data",
+                data: [
+                  reqs.rows[0].request_id, 
+                  visit_id, 
+                  request.file_id,
+                  request.response_time, 
+                  request.response_size, 
+                  request.response_code, 
+                  request.response_body.length, 
+                  request.response_headers
+                ]
+              });
           });
 
           return Promise.resolve(resp_data)
@@ -114,15 +118,19 @@ module.exports = {
       }).catch((err) => {
         logger.error(
           null, 
-          [
-            visit_id, 
-            request.request_time, 
-            request.request_post_data, 
-            request.request_url, 
-            request.request_method, 
-            request.request_headers
-          ]);
-        logger.error(null, err.message);
+          { 
+            message: err.message, 
+            action: "add_requests",
+            sub_action: "add request data",
+            data: [
+              visit_id, 
+              request.request_time, 
+              request.request_post_data, 
+              request.request_url, 
+              request.request_method, 
+              request.request_headers
+            ]
+          });
       });
       rows_added.push(outdata);
     });
@@ -174,7 +182,7 @@ module.exports = {
     .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
   },
   set_status: function(visit_id, status) {
-    logger.debug(null, `Setting status ${status} for visit ${visit_id}`);
+    logger.debug(null, {message: `Setting status ${status} for visit ${visit_id}`, action: "set_status"});
     return pg("visits").update({status: status}).where({visit_id: visit_id});
   },
   mark_complete: function(visit_id) {
@@ -196,6 +204,52 @@ module.exports = {
       WHERE to_tsvector('English', rsph.header_value) @@ to_tsquery('English', ?) \
       OR to_tsvector('English', rsph.header_name) @@ to_tsquery('English', ?)) rspt", [searchterm, searchterm, searchterm, searchterm]))
       .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
+  },
+  search_trgm_indexes: function(searchterm, perPage=20, currentPage=1) {
+    /*return pg.raw(`SELECT results.*, visits.createtime FROM (
+      SELECT header_value AS hit, 'request header value' AS loc, word_similarity(?, header_value) AS sml, visit_id FROM request_headers WHERE ? <% request_headers.header_value
+      UNION
+      SELECT header_name AS hit, 'request header name' AS loc, word_similarity(?, header_name) AS sml, visit_id FROM request_headers WHERE ? <% request_headers.header_name
+      UNION
+      SELECT header_value AS hit, 'response header value' AS loc, word_similarity(?, header_value) AS sml, visit_id FROM response_headers WHERE ? <% response_headers.header_value
+      UNION
+      SELECT header_name AS hit, 'response header name' AS loc, word_similarity(?, header_name) AS sml, visit_id FROM response_headers WHERE ? <% response_headers.header_name
+      UNION
+      SELECT request_url AS hit, 'request url' AS loc, word_similarity(?, request_url) AS sml, visit_id FROM requests WHERE ? <% requests.request_url
+      UNION
+      SELECT request_post_data AS hit, 'request POST data' AS loc, word_similarity(?, request_post_data) AS sml, visit_id FROM requests WHERE ? <% requests.request_post_data
+) AS results
+LEFT JOIN visits ON visits.visit_id=results.visit_id
+UNION
+      SELECT query AS hit, 'targets' AS loc, word_similarity(?, query) AS sml, null AS visit_id, createtime FROM targets WHERE ? <% query
+ORDER BY sml DESC, createtime DESC`, 
+    [searchterm, searchterm, searchterm, searchterm, searchterm, searchterm, searchterm, 
+    searchterm, searchterm, searchterm, searchterm, searchterm, searchterm, searchterm]);*/
+
+    return pg.select('results.*', 'visits.createtime', 'targets.query').from(function() {
+      this.select(pg.raw(`header_value AS hit, 'request header value' AS loc, word_similarity(?, header_value) AS sml, visit_id 
+        FROM request_headers WHERE ? <% request_headers.header_value`, [searchterm, searchterm]))
+      .union(
+        [    
+          pg.raw(`SELECT header_name AS hit, 'request header name' AS loc, word_similarity(?, header_name) AS sml, visit_id 
+            FROM request_headers WHERE ? <% request_headers.header_name`, [searchterm, searchterm]),
+          pg.raw(`SELECT header_value AS hit, 'response header value' AS loc, word_similarity(?, header_value) AS sml, visit_id 
+            FROM response_headers WHERE ? <% response_headers.header_value`, [searchterm, searchterm]),
+          pg.raw(`SELECT header_name AS hit, 'response header name' AS loc, word_similarity(?, header_name) AS sml, visit_id 
+            FROM response_headers WHERE ? <% response_headers.header_name`, [searchterm, searchterm]),
+          pg.raw(`SELECT request_url AS hit, 'request url' AS loc, word_similarity(?, request_url) AS sml, visit_id 
+            FROM requests WHERE ? <% requests.request_url`, [searchterm, searchterm]),
+          pg.raw(`SELECT request_post_data AS hit, 'request POST data' AS loc, word_similarity(?, request_post_data) AS sml, visit_id 
+            FROM requests WHERE ? <% requests.request_post_data`, [searchterm, searchterm])
+        ])
+      .as('results');
+    })
+    .leftJoin('visits', 'visits.visit_id', 'results.visit_id')
+    .leftJoin('targets', 'visits.target_id', 'targets.target_id')
+    .union([pg.raw(`SELECT query AS hit, 'targets' AS loc, word_similarity(?, query) AS sml, null AS visit_id, createtime, query 
+      FROM targets WHERE ? <% query`, [searchterm, searchterm])])
+    .orderBy([{column: 'sml', order: 'desc'}, {column: 'createtime', order: 'desc'}])
+    .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
   },
   search_requests: function(searchterm, perPage=20, currentPage=1) {
     return pg.select("*").from(pg.raw("(SELECT count(*), visits.* FROM request_headers rqt \
