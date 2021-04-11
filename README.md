@@ -6,7 +6,25 @@ Periscope is a utility for gathering information on URLs without using your own 
 
 Working with CentOS 8:
 - Run `install.sh` as root
-- Supply a database password and account name of the user __Periscope__ will be running as
+- Supply options for __Periscope__ to run as
+
+Recommended:
+- Configure a HTTPS reverse proxy such as Apache or Nginx
+- Proxy must supply the "X-Forwarded-Proto" header for login functionality (or session cookie will not be set)
+- Proxy must set the Upgrade + Connection headers for websocket functionality
+
+Sample Nginx location stanza:
+
+```
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $http_host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto "https";
+    }
+```
 
 # Sample output
 
@@ -15,7 +33,7 @@ Working with CentOS 8:
 ![Responsive design](screenshots/periscope-responsive.png "Responsive, mobile-friendly design")
 ![List of sandboxed sites](screenshots/periscope-visits.png "Easily triage websites")
 
-# Periscope API reference
+# Periscope API sample calls
 
 ## Add a new target to be examined
 `curl -XPOST http://periscope.local/targets/add -H "Content-Type: application/json" -d '{"url": "https://www.google.com"}'`
@@ -80,8 +98,8 @@ Returns list of _visit_ objects for the specified target ID:
 ## Create a new visit instance for an existing target
 `curl http://periscope.local/targets/1/new-visit`
  
- Creates a new _visit_ entry in the database for the specified target
- Returns the created _visit_ object
+Creates a new _visit_ entry in the database for the specified target
+Returns the created _visit_ object
 
 `curl http://periscope.local/visits`
 
