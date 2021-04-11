@@ -1,13 +1,14 @@
 <template>
 <b-container fluid>
-  <new-target>
+  <login v-bind:display="showLogin" @auth="authSuccess"></login>
+  <new-target v-if="loggedIn">
   </new-target>
-  <b-row id="top-nav" class="pagenav">
+  <b-row id="top-nav" class="pagenav" v-if="loggedIn">
     <b-col>
       <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="pagination.currentPage"></b-pagination-nav>
     </b-col>
   </b-row>
-  <b-container fluid>
+  <b-container fluid v-if="loggedIn">
     <b-row class="result-row" v-for="result in results" :key="result.visit_id">
       <b-col class="longdata" lg="6">
         <b-row>
@@ -48,7 +49,7 @@
       </b-col>
     </b-row>
   </b-container>
-  <b-row id="bottom-nav" class="pagenav">
+  <b-row id="bottom-nav" class="pagenav" v-if="loggedIn">
     <b-col>
       <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="pagination.currentPage"></b-pagination-nav>
     </b-col>
@@ -108,20 +109,31 @@ module.exports = {
         currentPage: 1,
         total: null
       },
+      loggedIn: false,
+      showLogin: false
     }
   },
   methods: {
     fetchResults: async function () {
-      let data = await axios({
+      axios({
         method: "get",
         url: `/search?page=${this.pagination.currentPage}&q=${this.searchTerm}&pagesize=${this.pagination.perPage}`,
+      }).then((result) => {
+        this.results = result.data.data;
+        this.pagination.from = result.data.pagination.from ? result.data.pagination.from : 0;
+        this.pagination.to = result.data.pagination.to ? result.data.pagination.to : this.pagination.to;
+        this.pagination.currentPage = result.data.pagination.currentPage ? result.data.pagination.currentPage : this.pagination.currentPage;
+        this.pagination.lastPage = result.data.pagination.lastPage ? result.data.pagination.lastPage : this.pagination.lastPage;
+        this.pagination.total = result.data.pagination.total ? result.data.pagination.total : this.pagination.total;
+
+        this.loggedIn = true;
+        this.showLogin = false;
+      }).catch((err) => {
+        if (err.response.status == 401) {
+          this.loggedIn = false;
+          this.showLogin = true;
+        }
       });
-      this.results = data.data.data;
-      this.pagination.from = data.data.pagination.from ? data.data.pagination.from : 0;
-      this.pagination.to = data.data.pagination.to ? data.data.pagination.to : this.pagination.to;
-      this.pagination.currentPage = data.data.pagination.currentPage ? data.data.pagination.currentPage : this.pagination.currentPage;
-      this.pagination.lastPage = data.data.pagination.lastPage ? data.data.pagination.lastPage : this.pagination.lastPage;
-      this.pagination.total = data.data.pagination.total ? data.data.pagination.total : this.pagination.total;
     },
     linkGen(pageNum) {
       return {
@@ -131,6 +143,10 @@ module.exports = {
     },
     pageGen() {
       return this.pagination.currentPage;
+    },
+    authSuccess() {
+      this.fetchResults();
+      this.$emit('auth', 'success');
     }
   },
   computed: {
@@ -145,6 +161,9 @@ module.exports = {
     this.searchTerm = to.query.q;
     this.fetchResults();
     next();
+  },
+  components: {
+    login: httpVueLoader("/pages/components/login-card.vue")
   }
 }
 </script>

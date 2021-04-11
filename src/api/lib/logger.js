@@ -20,31 +20,35 @@ const LOGLEVELNAMES = {
 
 const BASELOG = "/usr/local/unsafehex/periscope/data/logs/core.log";
   
-let CURRENTLOGLEVEL = options.loglevel ? options.loglevel : LOGLEVELS.INFO;
+let CURRENTLOGLEVEL = options.get("periscope", "loglevel") ? options.get("periscope", "loglevel") : LOGLEVELS.INFO;
 
 let LogMessage = async function(logfile, message, loglevel) {
-  if (loglevel >= CURRENTLOGLEVEL) {
-    let ts = moment().format("YYYY-MM-DD HH:mm:ss.SSSZ");
-    message.level = LOGLEVELNAMES[loglevel];
+  try {
+    if (loglevel >= CURRENTLOGLEVEL) {
+      let ts = moment().format("YYYY-MM-DD HH:mm:ss.SSSZ");
+      message.level = LOGLEVELNAMES[loglevel];
+    
+      // format the message
+      let msgobject = {time: ts, ...message};
+      let message_str = JSON.stringify(msgobject);
   
-    // format the message
-    let msgobject = {time: ts, ...message};
-    let message_str = JSON.stringify(msgobject);
-
-    // print to console
-    if (loglevel >= LOGLEVELS.ERROR) {
-      console.error(message_str);
-    } else {
-      console.log(message_str);
-    }
-
-    // only write if logfile is not null
-    if (logfile) {
-      fs.appendFile(logfile, message_str + "\n", function (e) {
+      // print to console
+      if (loglevel >= LOGLEVELS.ERROR) {
+        console.error(message_str);
+      } else {
+        console.log(message_str);
+      }
+  
+      // only write if logfile is not null
+      if (logfile) {
+        fs.appendFile(logfile, message_str + "\n", function (e) {
+        });
+      }
+      fs.appendFile(BASELOG, message_str + "\n", function (e) {
       });
     }
-    fs.appendFile(BASELOG, message_str + "\n", function (e) {
-    });
+  } catch(err) {
+    console.error(`A logging error occurred: ${err.message}`);
   }
 }
 

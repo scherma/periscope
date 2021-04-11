@@ -18,16 +18,34 @@
             </b-navbar-nav>
             <b-nav-form class="main-nav-form ml-auto" right>
               <b-navbar-nav class="w-100">
-                <b-form-input size="sm" class="mr-2 main-nav-form-item" placeholder="Search headers" name="search" v-model="search"></b-form-input>
+                <b-form-input size="sm" class="mr-2 main-nav-form-item" placeholder="Search headers" name="search" v-model="search" @keydown.enter.native="submit"></b-form-input>
                 <b-button @click.stop.prevent="submit()" size="sm" variant="secondary" type="submit" class="main-nav-form-item">Search</b-button>
               </b-navbar-nav>
             </b-nav-form>
+            <b-navbar-nav>
+              <b-nav-item-dropdown right v-if="logged_in">
+                <template #button-content>
+                  <b-icon-person-fill></b-icon-person-fill>
+                </template>
+                <b-dropdown-item>Logged in as {{user.name}}</b-dropdown-item>
+                <b-dropdown-item href="/#/account/view"><b-icon-sliders></b-icon-sliders> Account</b-dropdown-item>
+                <b-dropdown-item href="/#/admin" v-if="is_admin"><b-icon-gear-fill></b-icon-gear-fill> Admin</b-dropdown-item>
+                <b-dropdown-item @click="logout()"><b-icon-box-arrow-right></b-icon-box-arrow-right> Logout</b-dropdown-item>
+              </b-nav-item-dropdown>
+              <b-nav-item-dropdown right v-else>
+                <template #button-content>
+                  <b-icon-person></b-icon-person>
+                </template>
+                <b-dropdown-item @click="goLogin">Login <b-icon-box-arrow-in-right></b-icon-box-arrow-in-right></b-dropdown-item>
+                <b-dropdown-item href="/#/account/create" v-if="createUserAvailable">New Account <b-icon-person-plus></b-icon-person-plus></b-dropdown-item>
+              </b-nav-item-dropdown>
+            </b-navbar-nav>
           </b-collapse>
           <b-navbar-toggle target="periscope-nav"></b-navbar-toggle>
         </b-container>
       </b-navbar>
       <b-container class="main-content" fluid>
-        <router-view>
+        <router-view :logged_in="logged_in" :user="user" :permissions="permissions" @auth="loginState">
         </router-view>
       </b-container>
     </b-container>
@@ -42,16 +60,17 @@
     <script src="node_modules/bootstrap-vue/dist/bootstrap-vue-icons.min.js"></script>
     <script src="node_modules/http-vue-loader/src/httpVueLoader.js"></script>
     <script src="node_modules/vue-router/dist/vue-router.js"></script>
+    <script src="node_modules/vee-validate/dist/vee-validate.min.js"></script>
+    <script src="node_modules/vee-validate/dist/rules.umd.min.js"></script>
     <script src="/router/index.js"></script>
   </body>
 </html>
 
 <script type="module">
   import store from "./javascripts/store.js";
-
   Vue.use(
     new VueSocketIO({
-      connection: "http://yourappurl/",
+      connection: "https://apphostname",
       vuex: {
         store,
         actionPrefix: "SOCKET_",
@@ -66,17 +85,72 @@
     router,
     data: function() {
       return {
-        search: null
+        search: null,
+        user: null,
+        permissions: {},
+        logged_in: false,
+        createUserAvailable: null
       }
     },
     methods: {
       submit: function(evt) {
         this.$router.push(`/search?q=${this.search}`);
+      },
+      loginState: function() {
+        axios({
+          method: "get",
+          url: "/self"
+        }).then((result) => {
+          if (result.data && result.data.user) {
+            this.user = {
+              name: result.data.user,
+              roles: result.data.roles
+            }
+            this.logged_in = true;
+            
+          } else {
+            this.logged_in = false;
+            this.user = null;
+          }
+
+          this.createUserAvailable = result.data.createUserAvailable;
+          this.permissions = result.data.permissions;
+        }).catch((err) => {
+          console.log(err);
+        });
+      },
+      logout: function() {
+        axios({
+          method: "get",
+          url: "/logout"
+        }).then((result) => {
+          this.$router.go();
+        });
+      },
+      goLogin: function() {
+        if (this.$route.path == "/login") {
+          router.go("/login");
+        } else {
+          router.push("/login");
+        }
       }
+    },
+    computed: {
+      is_admin: function() {
+        if (this.user && this.user.roles.indexOf("admin") > -1) {
+          console.log("muahaha the power");
+          return true;
+        } else {
+          return false;
+        }
+      }
+    },
+    components: {
     },
     watch: {
       $route(to, from) {
         document.title = to.name;
+        this.loginState();
       },
     }
   }).$mount('#app');

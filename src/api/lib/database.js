@@ -2,9 +2,9 @@ var options = require("./options");
 var dbparams = {
   client: "pg",
   connection: {
-    database: options.dbname,
-    user: options.dbuser,
-    password: options.dbpass,
+    database: options.get("db", "name"),
+    user: options.get("db", "user"),
+    password: options.get("db", "pass"),
     host:"localhost"
   }
 };
@@ -14,20 +14,204 @@ attachPaginate();
 const logger = require("./logger");
 
 module.exports = {
-  add_target: function(submitted_url, submittime) {
-    var formatted = submittime.format("YYYY-MM-DD HH:mm:ss ZZ");
+
+  // admin functions
+
+  list_users: function(perPage=20, currentPage=1, order=[{column: "user_id", order:"desc"}]) {
+    return pg("users").select([
+      "user_id", "username", "email", "proposed_email", "account_activated", "account_activated_time",
+      "email_validated", "email_validated_time", "password_modified_time", "account_created_time", "creation_ip",
+      "account_locked_out", "account_locked_out_time", "account_locked_out_reason", "auth_failures_since_login",
+      "account_deleted", "account_deleted_time", "last_login", "last_login_ip", "roles"
+    ]).orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+  },
+  lock_user: function(user_id, lock_time, reason) {
+    let formatted = lock_time.format("YYYY-MM-DD HH:mm:ss ZZ");
+    return pg("users").update({
+      account_locked_out: true,
+      account_locked_out_time: formatted,
+      account_locked_out_reason: reason,
+    }).where({
+      user_id: user_id,
+      account_locked_out: false
+    });
+  },
+  unlock_user: function(user_id) {
+    return pg("users").update({
+      account_locked_out: false,
+      account_locked_out_time: null,
+      account_locked_out_reason: null
+    }).where({
+      user_id: user_id,
+      account_locked_out: true
+    });
+  },
+  set_user_roles: function(user_id, roles) {
+    return pg("users").update({
+      roles: JSON.stringify(roles)
+    }).where({
+      user_id: user_id
+    })
+  },
+
+  // User account functions
+
+  add_account: function(username, email, crypted_password, account_activate_token, createtime, creation_ip) {
+    var formatted_createtime = createtime.format("YYYY-MM-DD HH:mm:ss ZZ");
+    return pg.insert({
+      username: username,
+      password: crypted_password,
+      email: email,
+      account_activate_token: account_activate_token,
+      account_created_time: formatted_createtime,
+      creation_ip: creation_ip,
+      roles: '["user"]'
+    }).returning("user_id").into("users");
+  },
+  check_account_activate_token: function(account_activate_token, email) {
+    return pg("users").select("*").where({
+      email: email, 
+      account_activate_token: account_activate_token, 
+      account_activate_token_used: false
+    }).first();
+  },
+  activate_user: function(user_id, activate_time) {
+    var formatted = activate_time.format("YYYY-MM-DD HH:mm:ss ZZ");
+    return pg("users").update({
+      account_activated: true, 
+      account_activated_time: formatted, 
+      account_activate_token_used: true,
+      email_validated: true,
+      email_validated_time: formatted
+    }).where({user_id: user_id});
+  },
+  find_username_or_email: function(useridstr) {
+    return pg("users").where({email: useridstr}).orWhere({username: useridstr}).first();
+  },
+  find_user_by_id: function(user_id) {
+    return pg("users").where({user_id: user_id}).first();
+  },
+  failed_login: function(user_id) {
+    return pg("users").increment("auth_failures_since_login", 1).where({user_id: user_id});
+  },
+  add_pw_reset_token: function(user_id, password_reset_token, password_reset_token_expiry) {
+    var formatted = password_reset_token_expiry.format("YYYY-MM-DD HH:mm:ss ZZ");
+    return pg("users").update({
+      password_reset_token: password_reset_token,
+      password_reset_token_expiry: formatted,
+      password_reset_token_used: false
+    }).where({
+      user_id: user_id
+    })
+  },
+  check_pw_reset_token: function(pw_reset_token, email) {
+    return pg("users").select("*").where({
+      email: email, 
+      password_reset_token: pw_reset_token, 
+    }).first();
+  },
+  reset_password: function(user_id, crypted_password, reset_time) {
+    var formatted = reset_time.format("YYYY-MM-DD HH:mm:ss ZZ");
+    return pg("users").update({
+      password: crypted_password,
+      password_modified_time: formatted,
+      password_reset_token_used: true,
+      must_change_password: false
+    }).where({
+      user_id: user_id
+    });
+  },
+  set_password: function(user_id, crypted_password, set_time) {
+    var formatted = set_time.format("YYYY-MM-DD HH:mm:ss ZZ");
+    return pg("users").update({
+      password: crypted_password,
+      password_modified_time: formatted
+    }).where({
+      user_id: user_id
+    });
+  },
+  set_must_change_password: function(user_id) {
+    return pg("users").update({
+      must_change_password: true
+    }).where({
+      user_id: user_id
+    });
+  },
+  add_proposed_email: function(user_id, email_validate_token, proposed_email) {
+    return pg("users").update({
+      email_validate_token: email_validate_token,
+      email_validate_token_used: false,
+      proposed_email: proposed_email
+    }).where({
+      user_id: user_id
+    });
+  },
+  check_email_validate_token: function(email_validate_token, oldemail) {
+    return pg("users").select("*").where({
+      email_validate_token: email_validate_token, 
+      email: oldemail
+    }).first();
+  },
+  set_confirmed_email: function(user_id, new_email) {
+    return pg("users").update({
+      email: new_email,
+      proposed_email: null,
+      email_validate_token_used: true
+    }).where({
+      user_id: user_id
+    });
+  },
+  update_last_login: function(user_id, login_time, src_ip) {
+    let formatted = login_time.format("YYYY-MM-DD HH:mm:ss ZZ");
+    return pg("users").update({
+      last_login: formatted,
+      last_login_ip: src_ip,
+      auth_failures_since_login: 0
+    }).where({
+      user_id: user_id
+    });
+  },
+  delete_user: function(account, delete_time, reason) {
+    let formatted = delete_time.format("YYYY-MM-DD HH:mm:ss ZZ");
+    let email_removed = account.username + "_email_removed";
+    return pg("users").update({
+      account_deleted: true,
+      account_deleted_time: formatted,
+      email: email_removed
+    }).where({
+      user_id: account.user_id
+    });
+  },
+  add_signup_token: function(token, expiry) {
+    return pg.insert({token: token, token_expiry: expiry}).into("signup_tokens");
+  },
+  get_signup_token: function(token) {
+    return pg("signup_tokens").select("*").where({token: token}).first();
+  },
+  remove_signup_token: function(token) {
+    return pg("signup_tokens").where({token: token}).del();
+  },
+
+  // periscope app functions
+
+  add_target: function(submitted_url, submittime, added_by, private=false) {
+    let formatted = submittime.format("YYYY-MM-DD HH:mm:ss ZZ");
     return pg.insert({
       query: submitted_url,
-      createtime: formatted
+      createtime: formatted,
+      added_by: added_by,
+      private: private
     }).returning("*").into("targets");
   },
-  add_visit: function(target_id, submittime, settings) {
-    var formatted = submittime.format("YYYY-MM-DD HH:mm:ss ZZ");
+  add_visit: function(target_id, submittime, settings, added_by, private=false) {
+    let formatted = submittime.format("YYYY-MM-DD HH:mm:ss ZZ");
     return pg.insert({
       target_id: target_id,
       createtime: formatted,
       settings: settings,
-      status: "created"
+      status: "created",
+      added_by: added_by,
+      private: private
     }).returning("*").into("visits");
   },
   get_visit_results: function(visit_id) {
@@ -36,12 +220,26 @@ module.exports = {
     let dfpm = pg("dfpm_detections").select("*").where({visit_id: visit_id});
     return Promise.all([reqs, resps, dfpm]);
   },
-  get_visit: function(visit_id) {
-    return pg("visits").select(
+  get_visit: function(visit_id, user) {
+    let search_base = pg("visits").select(
       "targets.target_id",
       "targets.query",
       "visits.*"
-    ).leftJoin("targets", "visits.target_id", "targets.target_id").where({"visits.visit_id": visit_id});
+    ).leftJoin("targets", "visits.target_id", "targets.target_id");
+
+    if (user && user.roles && user.roles.indexOf("admin") > -1) {
+      return search_base.where({
+        "visits.visit_id": visit_id
+      }).first();
+    } else { 
+      return search_base.where({
+        "visits.visit_id": visit_id,
+        "visits.private": false
+      }).orWhere({
+        "visits.visit_id": visit_id,
+        "visits.added_by": user ? user.user_id : null
+      }).first();
+    }
   },
   add_requests: async function(requests, visit_id) {
     let req_sql = "WITH req(visit_id, request_time, request_post_data, request_url, request_method) AS (VALUES (?::integer, ?::timestamp with time zone, ?, ?, ?)), " +
@@ -160,26 +358,50 @@ module.exports = {
   set_screenshot_path: function(screenshot_path, visit_id) {
     return pg("visits").update({screenshot_path: screenshot_path}).where({visit_id: visit_id});
   },
-  list_visits: function(perPage=20, currentPage=1) {
-    return pg("targets").select(
+  list_visits: function(user, perPage=20, currentPage=1, order=[{column: "visits.visit_id", order: "desc"}]) {
+    let search_base = pg("targets").select(
       "targets.target_id",
       "targets.query",
       "visits.*"
-    ).leftJoin("visits", "targets.target_id", "visits.target_id")
-    .orderBy("visits.visit_id", "desc")
-    .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    ).leftJoin("visits", "targets.target_id", "visits.target_id");
+
+    if (user && user.roles && user.roles.indexOf("admin") > -1) {
+      return search_base.orderBy(order)
+      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    } else {
+      return search_base.where({'visits.private': false})
+      .orWhere({"visits.added_by": user ? user.user_id : null})
+      .orderBy(order)
+      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    }
   },
-  list_targets: function(perPage=20, currentPage=1) {
-    return pg("targets").select("targets.*")
+  list_targets: function(user, perPage=20, currentPage=1, order=[{column: "targets.target_id", order: "desc"}]) {
+    console.log(user);
+    let search_base = pg("targets").select("targets.*")
     .count("visits.*")
-    .leftJoin("visits", "targets.target_id", "visits.target_id")
-    .groupBy("targets.target_id")
-    .orderBy("targets.target_id", "desc").paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    .leftJoin("visits", "targets.target_id", "visits.target_id");
+    if (user && user.roles && user.roles.indexOf("admin") > -1) {
+      return search_base.groupBy("targets.target_id")
+      .orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    } else {
+      return search_base.where({'targets.private': false})
+      .orWhere({"targets.added_by": user ? user.user_id : null})
+      .groupBy("targets.target_id")
+      .orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    }
   },
-  list_target_visits: function(target_id, perPage=20, currentPage=1) {
-    return pg("targets").select("targets.target_id", "targets.query", "visits.*")
-    .leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id})
-    .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+  list_target_visits: function(target_id, user, perPage=20, currentPage=1, order=[{column: "visits.visit_id", order: "desc"}]) {
+    let search_base = pg("targets").select("targets.target_id", "targets.query", "visits.*")
+    .leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id});
+
+    if (user && user.roles && user.roles.indexOf("admin") > -1) {
+      return search_base.where({'targets.target_id': target_id})
+      .orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    } else {
+      return search_base.where({'visits.private': false, 'targets.target_id': target_id})
+      .orWhere({"visits.added_by": user ? user.user_id : null, 'targets.target_id': target_id})
+      .orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+    }
   },
   set_status: function(visit_id, status) {
     logger.debug(null, {message: `Setting status ${status} for visit ${visit_id}`, action: "set_status"});
@@ -188,45 +410,8 @@ module.exports = {
   mark_complete: function(visit_id) {
     return pg("visits").update({completed: true}).where({visit_id: visit_id});
   },
-  search_requests_and_responses: function(searchterm, perPage=20, currentPage=1) {
-    return pg.select("*").from(pg.raw("(SELECT visits.*, targets.*, rq.request_url, rq.request_id, rqh.header_id, rqh.header_name, rqh.header_value, 'request' etype \
-      FROM request_headers rqh \
-      LEFT JOIN requests rq ON rq.request_id = rqh.request_id LEFT JOIN visits ON visits.visit_id = rq.visit_id \
-      LEFT JOIN targets ON targets.target_id = visits.target_id \
-      WHERE to_tsvector('English', rqh.header_value) @@ to_tsquery('English', ?) \
-      OR to_tsvector('English', rqh.header_name) @@ to_tsquery('English', ?)) rqt \
-    UNION SELECT * FROM \
-    (SELECT visits.*, targets.*, rq.request_url, rsp.request_id, rsph.header_id, rsph.header_name, rsph.header_value, 'response' etype \
-      FROM response_headers rsph \
-      LEFT JOIN responses rsp ON rsp.response_id = rsph.response_id LEFT JOIN visits ON visits.visit_id = rsp.visit_id \
-      LEFT JOIN requests rq ON rsp.request_id = rq.request_id \
-      LEFT JOIN targets ON targets.target_id = visits.target_id \
-      WHERE to_tsvector('English', rsph.header_value) @@ to_tsquery('English', ?) \
-      OR to_tsvector('English', rsph.header_name) @@ to_tsquery('English', ?)) rspt", [searchterm, searchterm, searchterm, searchterm]))
-      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
-  },
-  search_trgm_indexes: function(searchterm, perPage=20, currentPage=1) {
-    /*return pg.raw(`SELECT results.*, visits.createtime FROM (
-      SELECT header_value AS hit, 'request header value' AS loc, word_similarity(?, header_value) AS sml, visit_id FROM request_headers WHERE ? <% request_headers.header_value
-      UNION
-      SELECT header_name AS hit, 'request header name' AS loc, word_similarity(?, header_name) AS sml, visit_id FROM request_headers WHERE ? <% request_headers.header_name
-      UNION
-      SELECT header_value AS hit, 'response header value' AS loc, word_similarity(?, header_value) AS sml, visit_id FROM response_headers WHERE ? <% response_headers.header_value
-      UNION
-      SELECT header_name AS hit, 'response header name' AS loc, word_similarity(?, header_name) AS sml, visit_id FROM response_headers WHERE ? <% response_headers.header_name
-      UNION
-      SELECT request_url AS hit, 'request url' AS loc, word_similarity(?, request_url) AS sml, visit_id FROM requests WHERE ? <% requests.request_url
-      UNION
-      SELECT request_post_data AS hit, 'request POST data' AS loc, word_similarity(?, request_post_data) AS sml, visit_id FROM requests WHERE ? <% requests.request_post_data
-) AS results
-LEFT JOIN visits ON visits.visit_id=results.visit_id
-UNION
-      SELECT query AS hit, 'targets' AS loc, word_similarity(?, query) AS sml, null AS visit_id, createtime FROM targets WHERE ? <% query
-ORDER BY sml DESC, createtime DESC`, 
-    [searchterm, searchterm, searchterm, searchterm, searchterm, searchterm, searchterm, 
-    searchterm, searchterm, searchterm, searchterm, searchterm, searchterm, searchterm]);*/
-
-    return pg.select('results.*', 'visits.createtime', 'targets.query').from(function() {
+  search_trgm_indexes: function(searchterm, user_id, perPage=20, currentPage=1, order=[{column: 'sml', order: 'desc'}, {column: 'createtime', order: 'desc'}]) {
+    let search_base = pg.select('results.*', 'visits.createtime', 'targets.query').from(function() {
       this.select(pg.raw(`header_value AS hit, 'request header value' AS loc, word_similarity(?, header_value) AS sml, visit_id 
         FROM request_headers WHERE ? <% request_headers.header_value`, [searchterm, searchterm]))
       .union(
@@ -247,30 +432,17 @@ ORDER BY sml DESC, createtime DESC`,
     .leftJoin('visits', 'visits.visit_id', 'results.visit_id')
     .leftJoin('targets', 'visits.target_id', 'targets.target_id')
     .union([pg.raw(`SELECT query AS hit, 'targets' AS loc, word_similarity(?, query) AS sml, null AS visit_id, createtime, query 
-      FROM targets WHERE ? <% query`, [searchterm, searchterm])])
-    .orderBy([{column: 'sml', order: 'desc'}, {column: 'createtime', order: 'desc'}])
-    .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
-  },
-  search_requests: function(searchterm, perPage=20, currentPage=1) {
-    return pg.select("*").from(pg.raw("(SELECT count(*), visits.* FROM request_headers rqt \
-    LEFT JOIN requests rq ON rq.request_id = rqt.request_id \
-    LEFT JOIN visits ON visits.visit_id = rq.visit_id \
-    RIGHT JOIN targets ON visits.target_id = targets.target_id \
-    WHERE to_tsvector('English', rqt.header_value) @@ to_tsquery('English', ?) \
-    OR to_tsvector('English', rqt.header_name) @@ to_tsquery('English', ?) \
-    GROUP BY visits.visit_id) rqt_entries", [searchterm, searchterm]))
-    .leftJoin("targets", "rqt_entries.target_id", "targets.target_id")
-    .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
-  },
-  search_responses: function(searchterm, perPage=20, currentPage=1) {
-    return pg.select("*").from(pg.raw("(SELECT count(*), visits.* FROM response_headers rph \
-    LEFT JOIN responses rp ON rp.response_id = rph.response_id \
-    LEFT JOIN visits ON visits.visit_id = rp.visit_id \
-    RIGHT JOIN targets ON visits.target_id = targets.target_id \
-    WHERE to_tsvector('English', rph.header_value) @@ to_tsquery('English', ?) \
-    OR to_tsvector('English', rph.header_name) @@ to_tsquery('English', ?) \
-    GROUP BY visits.visit_id) rph_entries", [searchterm, searchterm]))
-    .leftJoin("targets", "rph_entries.target_id", "targets.target_id")
-    .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
+      FROM targets WHERE ? <% query`, [searchterm, searchterm])]);
+    
+    if (user && user.roles && user.roles.indexOf("admin") > -1) {
+      return search_base.orderBy(order)
+      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
+    } else {
+      return search_base.where({'visits.private': false})
+      .orWhere({'visits.added_by': user_id})
+      .orderBy(order)
+      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
+    }
+    
   }
 }

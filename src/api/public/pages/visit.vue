@@ -1,5 +1,6 @@
 <template>
   <b-container id="visit" fluid>
+    <login v-bind:display="show_login" @auth="authSuccess"></login>
     <b-modal id="screenshot" title="Screenshot" scrollable hide-footer>
       <template v-slot:modal-title>
         Visit {{visitData.visit.visit_id}} screenshot
@@ -13,7 +14,7 @@
           label="Full screenshot for visit"></b-img-lazy>
       </div>
     </b-modal>
-    <b-row class="visit-head mb-2">
+    <b-row class="visit-head mb-2" v-if="permissions.can_view">
       <b-col>
         <b-row class="visit-meta">
           <b-col lg="8" class="mt-2">
@@ -82,7 +83,7 @@
             </b-navbar-nav>
             <b-navbar-nav class="ml-auto">
               <b-nav-item right class="visit-nav-item-right">
-                <re-run :targetID="visitData.visit.target_id" @visit-rerun="loadNewVisit"></re-run>
+                <re-run :target_id="visitData.visit.target_id" :target_url="visitData.visit.query" @visit-rerun="loadNewVisit" v-if="permissions.can_submit"></re-run>
               </b-nav-item>
               <b-nav-item right class="visit-nav-item-right" :href="`/visits/${visitData.visit.visit_id}/allfiles`"> 
                 <b-button size="sm" variant="secondary" right 
@@ -94,7 +95,7 @@
         </b-navbar>
       </b-col>
     </b-row>
-    <b-collapse id="collapse-log" v-model="showLog" v-if="visitData.logdata">
+    <b-collapse id="collapse-log" v-model="showLog" v-if="visitData.logdata && permissions.can_view">
       <b-row>
         <b-alert show class="alert-lowpad">
           <h5>Log entries</h5>
@@ -104,7 +105,7 @@
         </b-alert>
       </b-row>
     </b-collapse>
-    <b-collapse id="collapse-fingerprinting">
+    <b-collapse id="collapse-fingerprinting" v-if="permissions.can_view">
       <b-row class="visit-fingerprint" v-if="visitData.fingerprinting">
         <b-col>
           <b-row v-for="fingerprint in visitData.fingerprinting" :key="fingerprint.dfpm_id">
@@ -134,7 +135,7 @@
         </b-col>
       </b-row>
     </b-collapse>
-    <b-row v-if="visitData.visit.status!='complete' && visitData.visit.status!='failed'">
+    <b-row v-if="visitData.visit.status!='complete' && visitData.visit.status!='failed' && permissions.can_view">
       <b-col class="text-center">
         <b-spinner label="loading"></b-spinner>
       </b-col>
@@ -188,7 +189,7 @@
                 <b-col md="4" class="hlabel">HTTP status</b-col>
                 <b-col md="8" class="htext">{{request.response_code}}</b-col>
               </b-row>
-              <b-row v-if="request.response_data_length">
+              <b-row v-if="request.response_size">
                 <b-col md="4" class="hlabel">Response bytes</b-col>
                 <b-col md="8" class="htext">{{request.response_size}}</b-col>
               </b-row>
@@ -302,8 +303,14 @@ div.alert.alert-lowpad {
 
 <script>
 module.exports = {
+  props: {
+    logged_in: Boolean,
+    user: Object,
+    permissions: Object
+  },
   data: function() {
     return {
+      showBase: false,
       title: "",
       visitData: {
         visit: {
@@ -321,28 +328,39 @@ module.exports = {
       showLog: false,
       r: 0,
       toastCount: 0,
-      codes: {'100': 'Continue', '101': 'Switching Protocols', '200': 'OK', '201': 'Created', '202': 'Accepted', '203': 'Non-Authoritative Information', '204': 'No Content', '205': 'Reset Content', '206': 'Partial Content', '300': 'Multiple Choices', '301': 'Moved Permanently', '302': 'Found', '303': 'See Other', '304': 'Not Modified', '305': 'Use Proxy', '307': 'Temporary Redirect', '400': 'Bad Request', '401': 'Unauthorized', '402': 'Payment Required', '403': 'Forbidden', '404': 'Not Found', '405': 'Method Not Allowed', '406': 'Not Acceptable', '407': 'Proxy Authentication Required', '408': 'Request Timeout', '409': 'Conflict', '410': 'Gone', '411': 'Length Required', '412': 'Precondition Failed', '413': 'Payload Too Large', '414': 'URI Too Long', '415': 'Unsupported Media Type', '416': 'Range Not Satisfiable', '417': 'Expectation Failed', '418': "I'm a teapot", '426': 'Upgrade Required', '500': 'Internal Server Error', '501': 'Not Implemented', '502': 'Bad Gateway', '503': 'Service Unavailable', '504': 'Gateway Time-out', '505': 'HTTP Version Not Supported', '102': 'Processing', '207': 'Multi-Status', '226': 'IM Used', '308': 'Permanent Redirect', '422': 'Unprocessable Entity', '423': 'Locked', '424': 'Failed Dependency', '428': 'Precondition Required', '429': 'Too Many Requests', '431': 'Request Header Fields Too Large', '451': 'Unavailable For Legal Reasons', '506': 'Variant Also Negotiates', '507': 'Insufficient Storage', '511': 'Network Authentication Required'}
+      codes: {'100': 'Continue', '101': 'Switching Protocols', '200': 'OK', '201': 'Created', '202': 'Accepted', '203': 'Non-Authoritative Information', '204': 'No Content', '205': 'Reset Content', '206': 'Partial Content', '300': 'Multiple Choices', '301': 'Moved Permanently', '302': 'Found', '303': 'See Other', '304': 'Not Modified', '305': 'Use Proxy', '307': 'Temporary Redirect', '400': 'Bad Request', '401': 'Unauthorized', '402': 'Payment Required', '403': 'Forbidden', '404': 'Not Found', '405': 'Method Not Allowed', '406': 'Not Acceptable', '407': 'Proxy Authentication Required', '408': 'Request Timeout', '409': 'Conflict', '410': 'Gone', '411': 'Length Required', '412': 'Precondition Failed', '413': 'Payload Too Large', '414': 'URI Too Long', '415': 'Unsupported Media Type', '416': 'Range Not Satisfiable', '417': 'Expectation Failed', '418': "I'm a teapot", '426': 'Upgrade Required', '500': 'Internal Server Error', '501': 'Not Implemented', '502': 'Bad Gateway', '503': 'Service Unavailable', '504': 'Gateway Time-out', '505': 'HTTP Version Not Supported', '102': 'Processing', '207': 'Multi-Status', '226': 'IM Used', '308': 'Permanent Redirect', '422': 'Unprocessable Entity', '423': 'Locked', '424': 'Failed Dependency', '428': 'Precondition Required', '429': 'Too Many Requests', '431': 'Request Header Fields Too Large', '451': 'Unavailable For Legal Reasons', '506': 'Variant Also Negotiates', '507': 'Insufficient Storage', '511': 'Network Authentication Required'},
+      show_login: false
     }
   },
   methods: {
     fetchVisitData: async function () {
-      let data = await axios({
+      axios({
         method: "get",
         url: `/visits/${this.$route.params.id}`,
-      });
-      this.visitData = data.data;
-      this.title = `Visit ${this.visitData.visit.visit_id}`;
+      }).then((result) => {
+        this.showBase = true;
+        this.visitData = result.data;
+        this.title = `Visit ${this.visitData.visit.visit_id}`;
 
-      if (this.visitData.visit.status == 'failed') {
-        this.showLog = true;
-      }
-    },
-    newVisit: async function () {
-      let data = await axios({
-        method: "get",
-        url: `/targets/${this.visitData.visit.target_id}/new-visit`
+        if (this.visitData.visit.status == 'failed') {
+          this.showLog = true;
+        }
+
+        this.show_login = false;
+      }).catch((err) => {
+        this.showBase = false;
+        this.visitData = {visit: {visit_id: null}, results: { summary: { total_response_data: "", total_load_time: "" }, requests: [] }, fingerprinting: [] };
+        if (err.response.status == 401) {
+          this.logged_in = false;
+          this.show_login = true;
+        } else {
+          this.$bvToast.toast(err.message, {
+            noAutoHide: true,
+            variant: 'danger',
+            toaster: 'b-toaster-bottom-center'
+          });
+        }
       });
-      return data;
     },
     loadNewVisit: function(visit_id) {
       console.log("loadNewVisit called");
@@ -360,11 +378,11 @@ module.exports = {
     makeToast(message, variant) {
       this.toastCount++;
       this.$bvToast.toast(message, {
-        autoHideDelay: 5000,
+        autoHideDelay: 20000,
         appendToast: true,
         variant: variant,
-        name: b-toaster-top-center,
-        title: level
+        toaster: 'b-toaster-bottom-right',
+        title: variant
       });
     },
     statusMessage(stat_code) {
@@ -374,28 +392,36 @@ module.exports = {
       }
 
       return msg;
+    },
+    authSuccess() {
+      this.fetchVisitData();
+      this.$emit('auth', 'success');
     }
   },
   sockets: {
     status(data) {
       if (data == "complete") {
+        this.makeToast("All done!", "info");
         this.fetchVisitData();
         this.loadThumb();
+      } else {
+        this.makeToast(`${data.message}`, data.level);
       }
     },
     dfpm_alert(data) {
-      console.log(data);
       this.makeToast(`${data.category} fingerprinting detected!`, data.level)
-    }
+    },
   },
   computed: {
   },
   beforeMount: function () {
     this.fetchVisitData();
     this.joinRoom();
+    this.show_login = this.permissions.can_view == false;
   },
   components: {
-    "re-run": httpVueLoader("/pages/components/re-run-target.vue")
+    "re-run": httpVueLoader("/pages/components/re-run-target.vue"),
+    login: httpVueLoader("/pages/components/login-card.vue")
   }
 }
 </script>

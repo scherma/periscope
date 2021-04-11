@@ -1,13 +1,13 @@
 <template>
 <b-container fluid>
-  <new-target>
+  <new-target v-if="permissions.can_submit">
   </new-target>
-  <b-row id="top-nav" class="pagenav">
+  <b-row id="top-nav" class="pagenav" v-if="permissions.can_view">
     <b-col>
       <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="page"></b-pagination-nav>
     </b-col>
   </b-row>
-  <b-container fluid>
+  <b-container fluid v-if="permissions.can_view">
     <b-row class="visit-row" v-for="visit in visits" :key="visit.visit_id">
       <b-col class="longdata mt-2 mb-2" lg="6">
         <b-row>
@@ -27,7 +27,7 @@
       </b-col>
     </b-row>
   </b-container>
-  <b-row id="bottom-nav" class="pagenav">
+  <b-row id="bottom-nav" class="pagenav" v-if="permissions.can_view">
     <b-col>
       <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="page"></b-pagination-nav>
     </b-col>
@@ -64,6 +64,10 @@
 
 <script>
 module.exports = {
+  props: {
+    user: Object,
+    permissions: Object
+  },
   data: function() {
     return {
       title: "Visits for target" + this.$route.params.id,
@@ -81,12 +85,21 @@ module.exports = {
   },
   methods: {
     fetchVisits: async function () {
-      let data = await axios({
+      axios({
         method: "get",
         url: `/targets/${this.$route.params.id}?page=${this.page}`,
+      }).then((data) => {
+        this.visits = data.data.data;
+        this.pagination = data.data.pagination;
+      }).catch((error) => {
+        this.visits = null;
+        this.pagination = {from: null, to: null, lastPage: null, perPage: null, currentPage: 1};
+        this.$bvToast.toast(error.message, {
+            noAutoHide: true,
+          variant: 'danger',
+          toaster: 'b-toaster-bottom-center'
+        });
       });
-      this.visits = data.data.data;
-      this.pagination = data.data.pagination;
     },
     linkGen(pageNum) {
       return {

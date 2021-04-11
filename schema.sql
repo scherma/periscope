@@ -1,7 +1,9 @@
 CREATE TABLE targets (
     target_id SERIAL PRIMARY KEY,
     createtime timestamp with time zone,
-    query text NOT NULL UNIQUE
+    query text NOT NULL UNIQUE,
+    added_by integer,
+    private boolean DEFAULT FALSE
     );
 
 CREATE TABLE visits ( 
@@ -12,7 +14,9 @@ CREATE TABLE visits (
     completed bool DEFAULT FALSE,
     status text,
     screenshot_path text,
-    settings jsonb
+    settings jsonb,
+    added_by integer,
+    private boolean DEFAULT FALSE
     );
 
 CREATE TABLE requests (
@@ -62,8 +66,47 @@ CREATE TABLE dfpm_detections (
     dfpm_raw jsonb
     );
 
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    username varchar(100) NOT NULL UNIQUE,
+    email varchar(100) NOT NULL UNIQUE,
+    password text NOT NULL,
+    proposed_email varchar(100),
+    account_activate_token text,
+    account_activate_token_used boolean DEFAULT FALSE,
+    account_activated boolean DEFAULT FALSE,
+    account_activated_time timestamp with time zone,
+    email_validate_token text,
+    email_validate_token_used boolean DEFAULT FALSE,
+    email_validated boolean DEFAULT FALSE,
+    email_validated_time timestamp with time zone,
+    password_reset_token text,
+    password_reset_token_used boolean DEFAULT FALSE,
+    password_reset_token_expiry timestamp with time zone,
+    password_modified_time timestamp with time zone,
+    must_change_password boolean default false,
+    account_created_time timestamp with time zone,
+    creation_ip text,
+    account_deleted timestamp with time zone,
+    account_deleted_time timestamp with time zone,
+    account_locked_out boolean DEFAULT FALSE,
+    account_locked_out_time timestamp with time zone,
+    account_locked_out_reason text,
+    auth_failures_since_login integer DEFAULT 0,
+    last_login timestamp with time zone,
+    last_login_ip text,
+    roles jsonb
+    );
 
+CREATE TABLE signup_tokens (
+    token_id SERIAL PRIMARY KEY,
+    token text NOT NULL UNIQUE,
+    token_expiry timestamp with time zone
+    );
+
+ALTER TABLE ONLY targets ADD CONSTRAINT added_by FOREIGN KEY (added_by) REFERENCES users (user_id);
 ALTER TABLE ONLY visits ADD CONSTRAINT target_id FOREIGN KEY (target_id) REFERENCES targets(target_id);
+ALTER TABLE ONLY visits ADD CONSTRAINT added_by FOREIGN KEY (added_by) REFERENCES users(user_id);
 ALTER TABLE ONLY requests ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 ALTER TABLE ONLY responses ADD CONSTRAINT request_id FOREIGN KEY (request_id) REFERENCES requests(request_id);
 ALTER TABLE ONLY responses ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
@@ -72,6 +115,7 @@ ALTER TABLE ONLY request_headers ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) 
 ALTER TABLE ONLY response_headers ADD CONSTRAINT response_id FOREIGN KEY (response_id) REFERENCES responses(response_id);
 ALTER TABLE ONLY response_headers ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 ALTER TABLE ONLY dfpm_detections ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
+ALTER TABLE targets ADD CONSTRAINT query_added_by_unqiue UNIQUE (query, added_by);
 
 CREATE INDEX ON targets USING gin ( to_tsvector('english', query) );
 CREATE INDEX targets_trgm ON targets USING GIN(query gin_trgm_ops);

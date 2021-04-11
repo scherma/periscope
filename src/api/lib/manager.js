@@ -42,8 +42,6 @@ let response_add_data = function(request_time, request, response, result, errorl
   let response_time = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
   let response_code = null;
 
-  console.log(Object.keys(response));
-
   try {
     request_headers = request.headers();
   } catch (err) {
@@ -70,7 +68,7 @@ let response_add_data = function(request_time, request, response, result, errorl
     }
   
     try {
-      if (response_headers) {response_size = (typeof response_headers["content-length"] === 'undefined') ? null : response_headers["content-length"];}
+      if (response && response.body) {response_size = response.body.length}
     } catch (err) {
       logger.error(errorlog, {message: `Unable to add response size: ${err.message}`, action: "response_add_data"});
     }
@@ -176,6 +174,8 @@ let VisitTarget = async function(visit) {
 
         logger.debug(visit.errorlog, {message: `Pushing object to results`, action: "VisitTarget", sub_action: "page.on request"});
         result.push(result_obj);
+      }).catch((error) => {
+        logger.error(visit.errorlog, {message: `Unexpected error when handling error: ${error.message}`, action: "VisitTarget", sub_action: "page.on request"});
       });
     });
 
@@ -212,6 +212,7 @@ let VisitTarget = async function(visit) {
     });
 
     logger.info(visit.errorlog, {message: `Going to page`, query: visit.query, action: "VisitTarget"});
+    websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', { message: "Starting page request", level: "info"});
     await db.set_status(visit.visit_id, "Loading page");
     const response = await page.goto(
       visit.query, 
@@ -223,6 +224,7 @@ let VisitTarget = async function(visit) {
     );
 
     logger.info(visit.errorlog, {message: `Letting DFPM gather data, waiting a few secs...`, action: "VisitTarget"});
+    websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', { message: "Sleeping to let DFPM gather data...", level: "info"});
     await dfpm.sleep(10*1000);
 
     await db.set_status(visit.visit_id, "Writing screenshots");
@@ -233,32 +235,41 @@ let VisitTarget = async function(visit) {
     let screenshot_window_path = path.join(imagedir, `${visit.visit_id}_thumb.png`);
     let screenshot_uri_path = path.join(images_uri(moment(visit.time)), `${visit.visit_id}.png`);
 
+    websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', { message: "Generating windowed screenshot...", level: "info"});
     // generate window view and convert it to thumbnail
     try {
       logger.debug(visit.errorlog, {message: `Generating windowed screenshot to ${screenshot_window_path}`, action: "VisitTarget"});
       await page.screenshot({path: screenshot_window_path});
-
+      logger.debug(visit.errorlog, {message: `Windowed screenshot generated, saving to ${screenshot_window_path}`, action: "VisitTarget"});
       gm(screenshot_window_path)
       .resize(null, 250)
       .write(screenshot_window_path, function(err) {
         if (err) {
-          logger.error(visit.errorlog, {message: `Failed to resize thumbnail for ${visit.visit_id}: ${err.message}`, action: "VisitTarget"});
+          logger.error(visit.errorlog, {message: `Failed to write resized thumbnail for ${visit.visit_id}: ${err.message}`, action: "VisitTarget"});
+        } else {
+          logger.debug(visit.errorlog, {message: `Wrote resized thumbnail for ${visit.visit_id}`, action: "VisitTarget"});
         }
       });
     } catch (err) {
       logger.error(visit.errorlog, {message: `Error capturing windowed screenshot for ${visit.visit_id}: ${err.message}`, action: "VisitTarget"});
     }
 
+    websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', { message: "Generating full screenshot...", level: "info"});
     // generate screenshot of entire page
     try {
       logger.debug(visit.errorlog, {message: `Generating screenshot to ${screenshot_file_path}`, action: "VisitTarget"});
       await page.screenshot({path: screenshot_file_path, fullPage: true});  
+      logger.debug(visit.errorlog, {message: `Screenshot generated, saving to ${screenshot_file_path}`, action: "VisitTarget"});
     } catch (err) {
       logger.error(visit.errorlog, {message: `Error capturing full page screenshot for ${visit.visit_id}: ${err.message}`, action: "VisitTarget"});
     }
 
-    await db.set_status(visit.visit_id, "Writing files");
+    logger.debug(visit.errorlog, {message: `Closing page`, action: "VisitTarget"});
+    await page.close();
+    logger.debug(visit.errorlog, {message: `Page closed`, action: "VisitTarget"});
 
+    await db.set_status(visit.visit_id, "Writing files");
+    websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', { message: "Creating files archive", level: "info"});
     let d_path = date_folder(moment(visit.time));
     let d_dir = data_dir(d_path, visit.visit_id);
 
@@ -290,17 +301,14 @@ let VisitTarget = async function(visit) {
         r.response_body = '';
       }
       
-      logger.debug(visit.errorlog, {message: `Appending file ${idx} with size ${r.length} to archive`, action: "VisitTarget", sub_action: "archive.append"});
+      logger.debug(visit.errorlog, {message: `Appending file ${idx} with size ${r.response_body.length} to archive`, action: "VisitTarget", sub_action: "archive.append"});
       archive.append(r.response_body, {name: `${idx}`});
     });
 
     logger.debug(visit.errorlog, {message: `Finalizing archive`, action: "VisitTarget"});
     archive.finalize();
-
-    // allow time before exiting browser process for fingerprint detection to generate results
-    logger.debug(visit.errorlog, {message: `Closing page`, action: "VisitTarget"});
-    await page.close();
-    logger.debug(visit.errorlog, {message: `Page closed`, action: "VisitTarget"});
+    
+    websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', { message: "Archive written; wrapping up...", level: "info"});
 
     logger.debug(visit.errorlog, {message: `Marking completed in DB`, action: "VisitTarget"});
     await db.mark_complete(visit.visit_id);
@@ -359,16 +367,16 @@ let Visit = async function(visit) {
         .catch((err) => {
           logger.error(visit.errorlog, {message: `Error setting screenshot path: ${err.message}`, action: "Visit", sub_action: "db.set_screenshot_path.catch"});
         });
-      });
+      }).then(() => {
+        logger.debug(visit.errorlog, {message: "Adding DFPM detections to DB", action: "Visit", sub_action: "VisitTarget.then"});
 
-      logger.debug(visit.errorlog, {message: "Adding DFPM detections to DB", action: "Visit", sub_action: "VisitTarget.then"});
-
-      Promise.all([
-        db.set_status(visit.visit_id, `Writing DFPM to DB`),
-        db.add_dfpm(dfpm_detections)
-      ]).then(() => {  
-        db.set_status(visit.visit_id, "complete").then(() => {
-          websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', 'complete');
+        Promise.all([
+          db.set_status(visit.visit_id, `Writing DFPM to DB`),
+          db.add_dfpm(dfpm_detections)
+        ]).then(() => {  
+          db.set_status(visit.visit_id, "complete").then(() => {
+            websockets.alertWebsocketRoom(`visit/${visit.visit_id}`, 'status', 'complete');
+          });
         });
       });
     }).catch((err) => {
@@ -389,24 +397,22 @@ let Visit = async function(visit) {
   }
 }
 
-let VisitCreate = async function(target_id, devname) {    
-  // load Puppeteer device template based on device name
-  let settings = GetDeviceSettings(devname);
+let VisitCreate = async function(target_id, settings, added_by, make_private=false) {
+  logger.debug(null, {message: "VistCreate called", action: "VisitCreate", user_id: added_by, settings: settings});
 
   let submittime = moment();
 
-  let visit = await db.add_visit(target_id, submittime, settings);
+  let visit = await db.add_visit(target_id, submittime, settings, added_by, make_private);
 
   return visit;
 }
 
-let VisitRun = async function(visit_id) {
+let VisitRun = async function(visit_id, user_id) {
   logger.debug(null, {message: "VisitRun called", action: "VisitRun"});
-  return await db.get_visit(visit_id)
+  return await db.get_visit(visit_id, user_id)
   .then((visit) => {
     if (visit) {
       logger.debug(null, {message: `Got one! ${visit_id}`, action: "VisitRun"});
-      visit = visit[0];
     } else {
       let novisit = `No visit found with id ${visit_id}`;
       logger.error(null, {message: novisit, action: "VisitRun"});
@@ -424,13 +430,58 @@ let VisitRun = async function(visit_id) {
   });
 }
 
-let GetDeviceSettings = function(devname) {
-  if (devname == "default" || devname == null || typeof(devname) == "undefined") {
+let GetDeviceSettings = function(device) {
+  if (typeof(device) == 'undefined' || typeof(device) == 'null') {
     return periscopeDefaultDevice;
-  } else if (typeof(devname) == "string") {
-    return puppeteer.devices[devname];
+  } else if (typeof(device) == "string") {
+    if (device == "default") {
+      return periscopeDefaultDevice;
+    } else if (device in puppeteer.devices) {
+      return puppeteer.devices[device];
+    } else {
+      throw("invalid device");
+    }
   } else {
-    throw({message: "not a valid device"});
+    // if the device is the default or an existing puppeteer device, go with that
+    if (
+      periscopeDefaultDevice.userAgent == device.userAgent && 
+      periscopeDefaultDevice.viewport.width == device.viewport.width &&
+      periscopeDefaultDevice.viewport.height == device.viewport.height && 
+      periscopeDefaultDevice.viewport.deviceScaleFactor == device.viewport.deviceScaleFactor &&
+      periscopeDefaultDevice.viewport.isMobile == device.viewport.isMobile &&
+      periscopeDefaultDevice.viewport.hasTouch == device.viewport.hasTouch &&
+      periscopeDefaultDevice.viewport.isLandscape == device.viewport.isLandscape) {
+      // then devices are equal and oh god comparing objects is horrible
+      return periscopeDefaultDevice;
+    } else if (device.name in puppeteer.devices && 
+      puppeteer.devices[device.name].userAgent == device.userAgent && 
+      puppeteer.devices[device.name].viewport.width == device.viewport.width &&
+      puppeteer.devices[device.name].viewport.height == device.viewport.height && 
+      puppeteer.devices[device.name].viewport.deviceScaleFactor == device.viewport.deviceScaleFactor &&
+      puppeteer.devices[device.name].viewport.isMobile == device.viewport.isMobile &&
+      puppeteer.devices[device.name].viewport.hasTouch == device.viewport.hasTouch &&
+      puppeteer.devices[device.name].viewport.isLandscape == device.viewport.isLandscape) {
+
+      return device;
+    } else {
+      // otherwise set up a custom device
+      let result_device = {
+        name: `custom ${device.name}`,
+        userAgent: device.userAgent ? device.userAgent : periscopeDefaultDevice.userAgent
+      }
+
+      if (device.viewport) {
+        result_device.viewport.width = device.viewport.width ? device.viewport.width : periscopeDefaultDevice.viewport.width;
+        result_device.viewport.height = device.viewport.height ? device.viewport.height : periscopeDefaultDevice.viewport.height;
+        result_device.viewport.deviceScaleFactor = device.viewport.deviceScaleFactor ? device.viewport.deviceScaleFactor : periscopeDefaultDevice.viewport.deviceScaleFactor;
+        result_device.viewport.isMobile = device.viewport.isMobile ? device.viewport.isMobile : periscopeDefaultDevice.viewport.isMobile;
+        result_device.viewport.hasTouch = device.viewport.hasTouch ? device.viewport.hasTouch : periscopeDefaultDevice.viewport.hasTouch;
+        result_device.viewport.isLandscape = device.viewport.isLandscape ? device.viewport.isLandscape : periscopeDefaultDevice.viewport.isLandscape;
+      } else {
+        result_device.viewport = periscopeDefaultDevice.viewport;
+      }
+      return result_device;
+    }
   }
 }
 
@@ -442,7 +493,7 @@ let date_folder = function(m) {
 
 let images_folder = function(m) {
   let df = m.format("YYYYMMDD");
-  let images_path = `/usr/local/unsafehex/periscope/api/public/images/${df}`;
+  let images_path = `/usr/local/unsafehex/periscope/api/data/${df}/images`;
   return images_path;
 }
 
@@ -535,21 +586,6 @@ let stitch_results = function(reqs, responses) {
   return data;
 }
 
-let build_search_results = function([requests, responses]) {
-  let results = [];
-  requests.forEach((request) => {
-    request.type = "request";
-    results.push(request);
-  });
-
-  responses.forEach((response) => {
-    response.type = "response"; 
-    results.push(response);
-  });
-
-  return results;
-}
-
 module.exports = {
   DeviceOptions: function() {
     // puppeteer.devices is an object with device names as keys, and the settings as their values
@@ -561,12 +597,11 @@ module.exports = {
   DeviceSettings: function(devname) {
     return GetDeviceSettings(devname);
   },
-  ExtractSavedFile: async function(visit_id, file_id) {
+  ExtractSavedFile: async function(visit_id, file_id, user) {
     logger.debug(null, {message: "ExtractSavedFile called", action: "ExtractSavedFile"});
     // unarchive a specific requested file so that it can be downloaded; we need to load the info from the visit_id 
     // in order to locate the folder results have been stored in (folder is based on date of visit occurrence)
-    let visits = await db.get_visit(visit_id);
-    let visit = visits[0];
+    let visit = await db.get_visit(visit_id, user);
     return new Promise((fulfill, reject) => {
       let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
       let zippath = path.join(d_dir, "files.tar.gz");
@@ -605,83 +640,92 @@ module.exports = {
       });
     });
   },
-  FilesArchive: async function(visit_id) {
+  FilesArchive: async function(visit_id, user) {
     logger.debug(null, {message: "FilesArchive called", action: "FilesArchive"});
     // get path for archive for a visit; we need to load the info from the visit_id 
     // in order to locate the folder results have been stored in (folder is based on date of visit occurrence)
-    let visits = await db.get_visit(visit_id);
-    let visit = visits[0];
+    let visit = await db.get_visit(visit_id, user);
     return new Promise((fulfill, reject) => {
       let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
       let zippath = path.join(d_dir, "files.tar.gz");
       fulfill({path: zippath, name: `visit_${visit.visit_id}_files.tar.gz`});
     });
   },
-  VisitCreateNew: async function (target_id, devname) {
+  VisitCreateNew: async function (target_id, device, added_by, make_private=false) {
     logger.debug(null, {message: "VisitCreateNew called", action: "VisitCreateNew"});
     // for an exisitng target, visit again (by default this uses the original device settings)
-    return VisitCreate(target_id, devname)
+
+    if (make_private && !added_by) {
+      throw {message: "You must be logged in to make the item private!"}
+    }
+
+    let settings = GetDeviceSettings(device);
+
+    return VisitCreate(target_id, settings, added_by)
     .then((visit) => {
       visit = VisitRun(visit[0].visit_id)
       return visit;
     });
   },
-  VisitList: async function(pagesize=20, page=1) {
-    return await db.list_visits(perPage=pagesize, currentPage=page);
+  VisitList: async function(user, pagesize=20, page=1) {
+    return await db.list_visits(user, perPage=pagesize, currentPage=page);
   },
   VisitRun: VisitRun,
-  VisitBase: async function(visit_id) {
-    let visits = await db.get_visit(visit_id);
-    return visits[0];
-  },
-  VisitShow: async function(visit_id) {
-    let resultp = new Promise((fulfill) => {
-      db.get_visit_results(visit_id)
-      .then(([requests, responses, dfpm_detections]) => {
-        let results = stitch_results(requests, responses);
-        fulfill({results, dfpm_detections});
-      });
-    });
+  VisitBase: async function(visit_id, user) {
+    let visit = await db.get_visit(visit_id, user);
+    let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
 
-    let visitp = new Promise((fulfill) => {
-      db.get_visit(visit_id)
-      .then((visitrows) => {
-        let visit = visitrows[0];
-        let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
-        let logpath = path.join(d_dir, "error.log");
-        let logdata = null; 
-        
-        if (fs.existsSync(logpath)) {
-          logdata = fs.readFileSync(logpath, 'utf-8').split('\n');
+    let screenshot_path = path.join(d_dir, "images", `${visit_id}.png`);
+    let thumb_path = path.join(d_dir, "images", `${visit_id}_thumb.png`);
+    let thumb;
+    let screenshot;
+
+    if (fs.existsSync(thumb_path)) thumb = thumb_path;
+    if (fs.existsSync(screenshot_path)) screenshot = screenshot_path;
+    visit.screenshot = screenshot;
+    visit.thumb = thumb;
+
+    return visit;
+  },
+  VisitShow: async function(visit_id, user) {
+    return new Promise((resolve, reject) => {
+      db.get_visit(visit_id, user)
+      .then((visit) => {
+        if (visit) {
+          let d_dir = data_dir(date_folder(moment(visit.time_actioned)), visit.visit_id);
+          let logpath = path.join(d_dir, "error.log");
+          let logdata = null;
+          let screenshot_path = path.join(d_dir, "images", `${visit_id}.png`);
+          let thumb_path = path.join(d_dir, "images", `${visit_id}_thumb.png`);
+          let thumb;
+          let screenshot;
+
+          if (fs.existsSync(thumb_path)) thumb = thumb_path;
+          if (fs.existsSync(screenshot_path)) screenshot = screenshot_path;
+
+
+          if (fs.existsSync(logpath)) {
+            logdata = fs.readFileSync(logpath, 'utf-8').split('\n');
+          }
+
+          db.get_visit_results(visit_id)
+          .then(([requests, responses, dfpm_detections]) => {
+            let results = stitch_results(requests, responses);
+
+            resolve({visit: visit, results: results, fingerprinting: dfpm_detections, logdata: logdata, screenshot: screenshot, thumb: thumb })
+          });
+        } else {
+          reject({message: "visit not found"});
         }
-
-        fulfill({visit, logdata});
-      });
+      })
     });
-
-    let [resultdata, visitdata] = await Promise.all([resultp, visitp]);
-
-    return { visit: visitdata.visit, results: resultdata.results, fingerprinting: resultdata.dfpm_detections, logdata: visitdata.logdata }
   },
-  RequestSearch: async function(searchstring, perPage=20, currentPage=1) {
-    // needs improvement. lots of improvement.
-    /*
-    let rqs = db.search_requests(searchstring, perPage, currentPage);
-    let rsps = db.search_responses(searchstring, perPage, currentPage);
-
-    Promise.all([rqs, rsps])
-    .then(([a, b]) => {
-
-    });
-    
-    return db.search_requests_and_responses(searchstring, perPage, currentPage);
-    */
-    return db.search_trgm_indexes(searchstring, perPage, currentPage);
+  RequestSearch: async function(searchstring, user, perPage=20, currentPage=1) {
+    return db.search_trgm_indexes(searchstring, user, perPage, currentPage);
   },
-  TargetAdd: async function(submitted_url, devname) {
+  TargetAdd: async function(submitted_url, device, added_by, make_private=false) {
     logger.debug(null, {message: "TargetAdd called", action: "TargetAdd"});
     let parsed = new URL(submitted_url);
-    logger.info(parsed);
     if (parsed.protocol && ["http:", "https:", "data:"].indexOf(parsed.protocol) < 0) {
       logger.error(null, {message: `Invalid protocol supplied in URL "${submitted_url}"`, action: "TargetAdd"});
       throw {message: "Invalid protocol"};
@@ -691,8 +735,15 @@ module.exports = {
       throw {message: "Protocol is missing"};
     }
 
+    if (make_private && !user_id) {
+      throw {message: "You must be logged in to make the item private!"}
+    }
+    
+    // get settings before adding to DB (avoids creating target without associated visit)
+    let settings = GetDeviceSettings(device);
+
     let submittime = moment();
-    let target = await db.add_target(submitted_url, submittime);
+    let target = await db.add_target(submitted_url, submittime, added_by);
     
     if (!target) {
       throw {message: "Creation of target entry failed"};
@@ -701,7 +752,7 @@ module.exports = {
     }
 
     logger.debug(null, {message: `Creating visit from target ${target.target_id}`, action: "TargetAdd"});
-    let visit = await VisitCreate(target.target_id, devname);
+    let visit = await VisitCreate(target.target_id, settings, added_by, make_private);
 
     if (!visit) {
       throw {message: "Creation of visit entry failed"};
@@ -712,10 +763,10 @@ module.exports = {
 
     return visit;
   },
-  TargetList: async function(pagesize=20, page=1) {
-    return await db.list_targets(perPage=pagesize, currentPage=page);
+  TargetList: async function(user, pagesize=20, page=1) {
+    return await db.list_targets(user, perPage=pagesize, currentPage=page);
   },
-  TargetVisits: async function(target_id, pagesize=20, page=1) {
-    return await db.list_target_visits(target_id, perPage=pagesize, page=page);
+  TargetVisits: async function(target_id, user, pagesize=20, page=1) {
+    return await db.list_target_visits(target_id, user, perPage=pagesize, page=page);
   }
 }

@@ -20,7 +20,13 @@ if [ -z "$(getent passwd "$LABUSER")" ]; then
 fi
 
 read -s -p "Set database password: " DBPASS
-read -p "Enter the URL your app will be accessed at (needed for setting up websocket connection)" APPURL
+read -p "Enter the hostname/DNS name for this app: " APPHOSTNAME
+read -p "Enter an email SMTP server for the app to use: " APPMAILSERVER
+read -p "Enter the email address to use with the mail service: " APPMAILUSER
+read -s -p "Enter the password for the mail account: " APPMAILPASS
+
+APPSESSIONKEY=$(LC_ALL=C tr -dc '[:alnum:]' < /dev/urandom | head -c32)
+
 echo -e "${GREEN}Proceeding with URL sandbox installation${NC}"
 
 SCRIPTDIR=$(dirname "$(realpath "$0")")
@@ -30,12 +36,12 @@ function install_periscope_dependencies() {
     dnf update -y
 
     # install basic tools
-    dnf install -y tcpdump wget net-tools curl epel-release yum-utils rsync nodejs postgresql-server postgresql-contrib 
+    dnf install -y tcpdump wget net-tools curl epel-release yum-utils rsync nodejs postgresql-server postgresql-contrib libpq-devel
     # install chrome dependencies
     dnf install -y GraphicsMagick atk gtk3 alsa-lib-devel libXScrnSaver libXtst libXdamage libXcomposite libX11 mesa-libgbm libxshmfence
     dnf install -y libatk-1.0.so.0 libatk-bridge-2.0.so.0 libcups.so.2 libXcomposite.so.1 libXdamage.so.1 libXext.so.6
     dnf install -y libcups.so.2 libXcomposite.so.1 libXdamage.so.1 libXrandr.so.2 libgbm.so.1 libgtk-3.so.0 libgdk-3.so.0 libpango-1.0.so.0 
-    dnf install -y libnss3.so libasound.so.2 libxshmfence.so.1 gtk3.x86_64 libXcomposite.x86_64 alsa-lib.x86_64
+    dnf install -y libnss3.so libasound.so.2 libxshmfence.so.1 gtk3.x86_64 libXcomposite.x86_64 alsa-lib.x86_64 
     dnf install -y libXcursor.x86_64 libXdamage.x86_64 libXext.x86_64 libXi.x86_64 libXrandr.x86_64 libXScrnSaver.x86_64 libXtst.x86_64 
     dnf install -y pango.x86_64 xorg-x11-fonts-100dpi xorg-x11-fonts-75dpi xorg-x11-fonts-cyrillic xorg-x11-fonts-misc xorg-x11-fonts-Type1 
     dnf install -y xorg-x11-utils mesa-libgbm libxshmfence-1.3-2.el8.x86_64
@@ -51,12 +57,29 @@ function prep_directories() {
     rsync -r --info=progress2 "$SCRIPTDIR/src/"* "/usr/local/unsafehex/periscope/"
 
     echo "{
-        \"dbname\": \"periscope\",
-        \"dbuser\": \"$LABUSER\",
-        \"dbpass\": \"$DBPASS\"
+        \"db\": {
+            \"dbname\": \"periscope\",
+            \"dbuser\": \"$LABUSER\",
+            \"dbpass\": \"$DBPASS\",
+        },
+        \"http\": {
+            \"host\": \"$APPHOSTNAME\",
+            \"session_secret\": \"$APPSESSIONKEY\"
+        },
+        \"mail\": {
+            \"host\": \"$APPMAILSERVER\",
+            \"user\": \"$APPMAILUSER\",
+            \"pass\": \"$APPMAILPASS\"
+        },
+        \"periscope\": {
+            \"loglevel\": 1,
+            \"public_signup_allowed\": true,
+            \"view_role\": null,
+            \"submit_role\": null
+        }
     }" > /usr/local/unsafehex/periscope/api/lib/options.json
 
-    sed -e "s~http://yourappurl/~$APPURL~" "$SCRIPTDIR/src/api/public/index.html" > /usr/local/unsafehex/periscope/api/public/index.html
+    sed -e "s~yourappurl~$APPHOSTNAME~" "$SCRIPTDIR/src/api/public/index.html" > /usr/local/unsafehex/periscope/api/public/index.html
 
     # install nodejs dependencies
     npm i sass pm2 -g --save
@@ -93,6 +116,7 @@ function configure_periscope_db() {
     su -c "psql -c \"CREATE DATABASE periscope;\"" postgres
     su -c "psql -c \"ALTER DATABASE periscope OWNER TO $LABUSER;\"" postgres
     su -c "psql -d periscope -c \"CREATE EXTENSION pg_trgm;\"" postgres
+    su -c "psql -d periscope -c \"CREATE EXTENSION pgcrypto;\"" postgres
     su -c "psql -q periscope < $SCRIPTDIR/schema.sql" $LABUSER
 }
 

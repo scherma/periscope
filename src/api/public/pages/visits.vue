@@ -1,13 +1,14 @@
 <template>
 <b-container fluid>
-  <new-target>
+  <login v-bind:display="show_login" @auth="authSuccess"></login>
+  <new-target v-if="permissions.can_submit || logged_in" v-bind:logged_in="logged_in">
   </new-target>
-  <b-row id="top-nav" class="pagenav">
+  <b-row id="top-nav" class="pagenav" v-if="permissions.can_view">
     <b-col>
       <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="page"></b-pagination-nav>
     </b-col>
   </b-row>
-  <b-container fluid>
+  <b-container fluid v-if="permissions.can_view">
     <b-row class="visit-row" v-for="visit in visits" :key="visit.visit_id">
       <b-col class="longdata" lg="6">
         <b-row>
@@ -22,6 +23,9 @@
         <b-row>
           <b-col class="datetext">Status: <span :class="visit.status">{{visit.status}}</span></b-col>
         </b-row>
+        <b-row v-if="visit.private">
+          <b-col><b-icon-eye-slash></b-icon-eye-slash></b-col>
+        </b-row>
       </b-col>
       <b-col lg="6" class="imgcol">
         <div class="img-wrapper">
@@ -30,7 +34,7 @@
       </b-col>
     </b-row>
   </b-container>
-  <b-row id="bottom-nav" class="pagenav">
+  <b-row id="bottom-nav" class="pagenav" v-if="permissions.can_view">
     <b-col>
       <b-pagination-nav use-router :number-of-pages="pagination.lastPage" :link-gen="linkGen" first-number last-number :v-model="page"></b-pagination-nav>
     </b-col>
@@ -73,6 +77,11 @@
 
 <script>
 module.exports = {
+  props: {
+    logged_in: Boolean,
+    user: Object,
+    permissions: Object
+  },
   title: "Visits",
   data: function() {
     return {
@@ -86,16 +95,31 @@ module.exports = {
         perPage: null,
         currentPage: 1
       },
+      logged_in: false,
+      show_login: false
     }
   },
   methods: {
     fetchVisits: async function () {
-      let data = await axios({
+      axios({
         method: "get",
         url: `/visits?page=${this.page}`,
+      }).then((result) => {  
+        this.visits = result.data.data;
+        this.pagination = result.data.pagination;
+        this.show_login = false;
+      }).catch((err) => {
+        if (err.response.status == 401) {
+          this.logged_in = false;
+          this.show_login = true;
+        } else {
+          this.$bvToast.toast(err.message, {
+            noAutoHide: true,
+            variant: 'danger',
+            toaster: 'b-toaster-bottom-center'
+          });
+        }
       });
-      this.visits = data.data.data;
-      this.pagination = data.data.pagination;
     },
     linkGen(pageNum) {
       return {
@@ -105,6 +129,10 @@ module.exports = {
     },
     pageGen() {
       return this.page;
+    },
+    authSuccess() {
+      this.fetchVisits();
+      this.$emit('auth', 'success');
     }
   },
   computed: {
@@ -118,7 +146,8 @@ module.exports = {
     next();
   },
   components: {
-    "new-target": httpVueLoader("/pages/components/new-target.vue")
+    "new-target": httpVueLoader("/pages/components/new-target.vue"),
+    login: httpVueLoader("/pages/components/login-card.vue")
   }
 }
 </script>
