@@ -30,7 +30,8 @@ router.post("/login", function(req, res, next) {
       message: "login success", 
       action: "/login", 
       id: req.body.useridstr, 
-      user_id: req.session.user.user_id, 
+      user_id: req.session.user.user_id,
+      username: req.session.user.username,
       src_ip: req.ip, 
       ua: ua, 
       result: "success"
@@ -126,7 +127,7 @@ router.get("/search", accounts.require_auth(search_role), function (req, res, ne
   */
   let page = typeof(parseInt(req.query.page)) == "number" ? parseInt(req.query.page) : 1;
   let pagesize = typeof(parseInt(req.query.pagesize)) == "number" ? parseInt(req.query.pagesize) : 20;
-  manager.RequestSearch(req.query.q, perPage=pagesize, currentPage=page)
+  manager.RequestSearch(req.query.q, req.session.user, perPage=pagesize, currentPage=page)
   .then((results) => {
     res.send(results);
   })

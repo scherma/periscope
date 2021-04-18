@@ -218,7 +218,7 @@ let VisitTarget = async function(visit) {
       visit.query, 
       {
         waitUntil: "networkidle0",
-        referrer: "https://www.bing.com",
+        referrer: visit.referrer,
         timeout: visit.timeout ? visit.timeout : 0
       }
     );
@@ -229,7 +229,7 @@ let VisitTarget = async function(visit) {
 
     await db.set_status(visit.visit_id, "Writing screenshots");
 
-    let imagedir = images_folder(moment(visit.time));
+    let imagedir = images_folder(moment(visit.time), visit.visit_id);
 
     let screenshot_file_path = path.join(imagedir, `${visit.visit_id}.png`);
     let screenshot_window_path = path.join(imagedir, `${visit.visit_id}_thumb.png`);
@@ -340,7 +340,7 @@ let Visit = async function(visit) {
       fs.mkdirSync(d_dir);
     }
 
-    let images_dir = images_folder(moment(action_time));
+    let images_dir = images_folder(moment(action_time), visit.visit_id);
     logger.info(visit.errorlog, {message: `Images for visit ${visit.visit_id} being stored in ${images_dir}`, action: "Visit"});
 
     if (!fs.existsSync(images_dir)) {
@@ -397,19 +397,31 @@ let Visit = async function(visit) {
   }
 }
 
-let VisitCreate = async function(target_id, settings, added_by, make_private=false) {
-  logger.debug(null, {message: "VistCreate called", action: "VisitCreate", user_id: added_by, settings: settings});
+let VisitCreate = async function(target_id, settings, referrer, added_by, make_private=false) {
+  logger.debug(null, {message: "VistCreate called", action: "VisitCreate", user_id: added_by, settings: settings, referrer: referrer});
 
   let submittime = moment();
 
-  let visit = await db.add_visit(target_id, submittime, settings, added_by, make_private);
+  ValidateReferrer(referrer);
+
+  let visit = await db.add_visit(target_id, submittime, settings, referrer, added_by, make_private);
 
   return visit;
 }
 
-let VisitRun = async function(visit_id, user_id) {
+let ValidateReferrer = function(referrer) {
+  let validated = new URL(referrer);
+  
+  if (["http:", "https:"].indexOf(validated.protocol) > -1) {
+    return validated;
+  } else {
+    throw {message: "invalid URL specified!"}
+  }
+}
+
+let VisitRun = async function(visit_id, user) {
   logger.debug(null, {message: "VisitRun called", action: "VisitRun"});
-  return await db.get_visit(visit_id, user_id)
+  return await db.get_visit(visit_id, user)
   .then((visit) => {
     if (visit) {
       logger.debug(null, {message: `Got one! ${visit_id}`, action: "VisitRun"});
@@ -491,9 +503,9 @@ let date_folder = function(m) {
   return date_path;
 }
 
-let images_folder = function(m) {
+let images_folder = function(m, visit_id) {
   let df = m.format("YYYYMMDD");
-  let images_path = `/usr/local/unsafehex/periscope/api/data/${df}/images`;
+  let images_path = `/usr/local/unsafehex/periscope/data/${df}/${visit_id}/images`;
   return images_path;
 }
 
@@ -590,8 +602,8 @@ module.exports = {
   DeviceOptions: function() {
     // puppeteer.devices is an object with device names as keys, and the settings as their values
     // we only need the keys to present to users as options
-    let keys = Object.keys(puppeteer.devices);
-    keys.push("default");
+    let keys = ["default"];
+    keys.push(...Object.keys(puppeteer.devices));
     return keys;
   },
   DeviceSettings: function(devname) {
@@ -651,20 +663,31 @@ module.exports = {
       fulfill({path: zippath, name: `visit_${visit.visit_id}_files.tar.gz`});
     });
   },
-  VisitCreateNew: async function (target_id, device, added_by, make_private=false) {
+  VisitCreateNew: async function (target_id, device, referrer, user, make_private=false) {
     logger.debug(null, {message: "VisitCreateNew called", action: "VisitCreateNew"});
     // for an exisitng target, visit again (by default this uses the original device settings)
 
-    if (make_private && !added_by) {
-      throw {message: "You must be logged in to make the item private!"}
-    }
+    return new Promise((resolve, reject) => {
+      if (make_private && !user) {
+        reject({message: "You must be logged in to make the item private!"});
+      }
 
-    let settings = GetDeviceSettings(device);
-
-    return VisitCreate(target_id, settings, added_by)
-    .then((visit) => {
-      visit = VisitRun(visit[0].visit_id)
-      return visit;
+      ValidateReferrer(referrer);
+  
+      let settings = GetDeviceSettings(device);
+  
+      db.get_target(target_id, user)
+      .then((target) => {
+        if (target) {
+          VisitCreate(target_id, settings, referrer, user, make_private)
+          .then((visit) => {
+            visit = VisitRun(visit[0].visit_id, user)
+            resolve(visit);
+          });
+        } else {
+          reject({message: "target not found"});
+        }
+      });
     });
   },
   VisitList: async function(user, pagesize=20, page=1) {
@@ -703,7 +726,6 @@ module.exports = {
           if (fs.existsSync(thumb_path)) thumb = thumb_path;
           if (fs.existsSync(screenshot_path)) screenshot = screenshot_path;
 
-
           if (fs.existsSync(logpath)) {
             logdata = fs.readFileSync(logpath, 'utf-8').split('\n');
           }
@@ -723,7 +745,7 @@ module.exports = {
   RequestSearch: async function(searchstring, user, perPage=20, currentPage=1) {
     return db.search_trgm_indexes(searchstring, user, perPage, currentPage);
   },
-  TargetAdd: async function(submitted_url, device, added_by, make_private=false) {
+  TargetAdd: async function(submitted_url, device, referrer, user, make_private=false) {
     logger.debug(null, {message: "TargetAdd called", action: "TargetAdd"});
     let parsed = new URL(submitted_url);
     if (parsed.protocol && ["http:", "https:", "data:"].indexOf(parsed.protocol) < 0) {
@@ -735,7 +757,9 @@ module.exports = {
       throw {message: "Protocol is missing"};
     }
 
-    if (make_private && !user_id) {
+    ValidateReferrer(referrer);
+
+    if (make_private && !user.user_id) {
       throw {message: "You must be logged in to make the item private!"}
     }
     
@@ -743,22 +767,35 @@ module.exports = {
     let settings = GetDeviceSettings(device);
 
     let submittime = moment();
-    let target = await db.add_target(submitted_url, submittime, added_by);
+    let target;
     
-    if (!target) {
-      throw {message: "Creation of target entry failed"};
+    let existing = await db.find_target(submitted_url);
+
+    if (existing) {
+      if (existing.private && existing.added_by!=user.user_id) {
+        // well it ain't private now!
+        await db.set_target_privacy(existing.target_id, false);
+      }
+
+      target = existing;
     } else {
-      target = target[0];
+      target = await db.add_target(submitted_url, submittime, user, make_private);
+      
+      if (!target) {
+        throw {message: "Creation of target entry failed"};
+      } else {
+        target = target[0];
+      }
     }
 
     logger.debug(null, {message: `Creating visit from target ${target.target_id}`, action: "TargetAdd"});
-    let visit = await VisitCreate(target.target_id, settings, added_by, make_private);
+    let visit = await VisitCreate(target.target_id, settings, referrer, user, make_private);
 
     if (!visit) {
       throw {message: "Creation of visit entry failed"};
     } else {
       visit = visit[0];
-      visit = VisitRun(visit.visit_id);
+      visit = VisitRun(visit.visit_id, user);
     }
 
     return visit;

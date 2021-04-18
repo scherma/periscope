@@ -13,6 +13,7 @@ CREATE TABLE visits (
     time_actioned timestamp with time zone, 
     completed bool DEFAULT FALSE,
     status text,
+    referrer text,
     screenshot_path text,
     settings jsonb,
     added_by integer,
@@ -115,7 +116,6 @@ ALTER TABLE ONLY request_headers ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) 
 ALTER TABLE ONLY response_headers ADD CONSTRAINT response_id FOREIGN KEY (response_id) REFERENCES responses(response_id);
 ALTER TABLE ONLY response_headers ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
 ALTER TABLE ONLY dfpm_detections ADD CONSTRAINT visit_id FOREIGN KEY (visit_id) REFERENCES visits(visit_id);
-ALTER TABLE targets ADD CONSTRAINT query_added_by_unqiue UNIQUE (query, added_by);
 
 CREATE INDEX ON targets USING gin ( to_tsvector('english', query) );
 CREATE INDEX targets_trgm ON targets USING GIN(query gin_trgm_ops);

@@ -64,7 +64,6 @@ router.all("/unlock/:user_id", accounts.require_auth(admin_role), function(req, 
   let ua = req.headers['user-agent'] || "";
   admin.unlock_user(req.params.user_id)
   .then((result) => {
-    console.log(result);
     logger.info(null, {
       message: "an account was unlocked", 
       action: "/admin/lock/:user_id", 

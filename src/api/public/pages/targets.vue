@@ -16,8 +16,11 @@
         </b-row>
         <b-row>
           <b-col class="datetext">Created: {{moment(target.createtime).format("YYYY-MM-DD HH:mm:ss")}} - Visits: {{target.count}}
-            <span v-if="target.private"> - <b-icon-eye-slash></b-icon-eye-slash></span>
+            <span v-if="target.private"> - <b-icon-eye-slash v-b-tooltip.hover title="Private submission"></b-icon-eye-slash></span>
           </b-col>
+        </b-row>
+        <b-row v-if="target.username">
+          <b-col class="datetext">Submitted by: {{target.username}}</b-col>
         </b-row>
       </b-col>
       <b-col lg="2" class="mt-2 mb-2">

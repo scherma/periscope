@@ -24,7 +24,10 @@
           <b-col class="datetext">Status: <span :class="visit.status">{{visit.status}}</span></b-col>
         </b-row>
         <b-row v-if="visit.private">
-          <b-col><b-icon-eye-slash></b-icon-eye-slash></b-col>
+          <b-col class="datetext"><b-icon-eye-slash v-b-tooltip:hover title="Private submission"></b-icon-eye-slash></b-col>
+        </b-row>
+        <b-row v-if="visit.username">
+          <b-col class="datetext">Submitted by: {{visit.username}}</b-col>
         </b-row>
       </b-col>
       <b-col lg="6" class="imgcol">

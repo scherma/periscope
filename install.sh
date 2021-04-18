@@ -20,10 +20,12 @@ if [ -z "$(getent passwd "$LABUSER")" ]; then
 fi
 
 read -s -p "Set database password: " DBPASS
+echo ""
 read -p "Enter the hostname/DNS name for this app: " APPHOSTNAME
 read -p "Enter an email SMTP server for the app to use: " APPMAILSERVER
 read -p "Enter the email address to use with the mail service: " APPMAILUSER
 read -s -p "Enter the password for the mail account: " APPMAILPASS
+echo ""
 
 APPSESSIONKEY=$(LC_ALL=C tr -dc '[:alnum:]' < /dev/urandom | head -c32)
 
@@ -39,14 +41,13 @@ function install_periscope_dependencies() {
     dnf install -y tcpdump wget net-tools curl epel-release yum-utils rsync nodejs postgresql-server postgresql-contrib libpq-devel
     # install chrome dependencies
     dnf install -y GraphicsMagick atk gtk3 alsa-lib-devel libXScrnSaver libXtst libXdamage libXcomposite libX11 mesa-libgbm libxshmfence
+    dfn install -y libappindicator-gtk3 libdbusmenu libdbusmenu-gtk3 liberation-fonts liberation-serif-fonts
     dnf install -y libatk-1.0.so.0 libatk-bridge-2.0.so.0 libcups.so.2 libXcomposite.so.1 libXdamage.so.1 libXext.so.6
     dnf install -y libcups.so.2 libXcomposite.so.1 libXdamage.so.1 libXrandr.so.2 libgbm.so.1 libgtk-3.so.0 libgdk-3.so.0 libpango-1.0.so.0 
     dnf install -y libnss3.so libasound.so.2 libxshmfence.so.1 gtk3.x86_64 libXcomposite.x86_64 alsa-lib.x86_64 
     dnf install -y libXcursor.x86_64 libXdamage.x86_64 libXext.x86_64 libXi.x86_64 libXrandr.x86_64 libXScrnSaver.x86_64 libXtst.x86_64 
     dnf install -y pango.x86_64 xorg-x11-fonts-100dpi xorg-x11-fonts-75dpi xorg-x11-fonts-cyrillic xorg-x11-fonts-misc xorg-x11-fonts-Type1 
     dnf install -y xorg-x11-utils mesa-libgbm libxshmfence-1.3-2.el8.x86_64
-
-    
 }
 
 function prep_directories() {
@@ -58,9 +59,9 @@ function prep_directories() {
 
     echo "{
         \"db\": {
-            \"dbname\": \"periscope\",
-            \"dbuser\": \"$LABUSER\",
-            \"dbpass\": \"$DBPASS\",
+            \"name\": \"periscope\",
+            \"user\": \"$LABUSER\",
+            \"pass\": \"$DBPASS\"
         },
         \"http\": {
             \"host\": \"$APPHOSTNAME\",
@@ -77,9 +78,9 @@ function prep_directories() {
             \"view_role\": null,
             \"submit_role\": null
         }
-    }" > /usr/local/unsafehex/periscope/api/lib/options.json
+    }" > /usr/local/unsafehex/periscope/api/lib/options_data.json
 
-    sed -e "s~yourappurl~$APPHOSTNAME~" "$SCRIPTDIR/src/api/public/index.html" > /usr/local/unsafehex/periscope/api/public/index.html
+    sed -e "s~apphostname~$APPHOSTNAME~" "$SCRIPTDIR/src/api/public/index.html" > /usr/local/unsafehex/periscope/api/public/index.html
 
     # install nodejs dependencies
     npm i sass pm2 -g --save
@@ -112,12 +113,19 @@ function configure_periscope_db() {
     systemctl enable --now postgresql
     systemctl restart postgresql
 
+    mkdir /tmp/periscope
+
+    cp $SCRIPTDIR/schema.sql /tmp/periscope
+    cd /tmp/periscope
+
     su -c "psql -c \"CREATE USER $LABUSER WITH PASSWORD '$DBPASS';\"" postgres
     su -c "psql -c \"CREATE DATABASE periscope;\"" postgres
     su -c "psql -c \"ALTER DATABASE periscope OWNER TO $LABUSER;\"" postgres
     su -c "psql -d periscope -c \"CREATE EXTENSION pg_trgm;\"" postgres
     su -c "psql -d periscope -c \"CREATE EXTENSION pgcrypto;\"" postgres
-    su -c "psql -q periscope < $SCRIPTDIR/schema.sql" $LABUSER
+    su -c "psql -q periscope < schema.sql" $LABUSER
+
+    cd $SCRIPTDIR
 }
 
 function start_periscope() {

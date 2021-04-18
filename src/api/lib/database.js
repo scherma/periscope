@@ -194,23 +194,24 @@ module.exports = {
 
   // periscope app functions
 
-  add_target: function(submitted_url, submittime, added_by, private=false) {
+  add_target: function(submitted_url, submittime, user, private=false) {
     let formatted = submittime.format("YYYY-MM-DD HH:mm:ss ZZ");
     return pg.insert({
       query: submitted_url,
       createtime: formatted,
-      added_by: added_by,
+      added_by: user ? user.user_id : null,
       private: private
     }).returning("*").into("targets");
   },
-  add_visit: function(target_id, submittime, settings, added_by, private=false) {
+  add_visit: function(target_id, submittime, settings, referrer, user, private=false) {
     let formatted = submittime.format("YYYY-MM-DD HH:mm:ss ZZ");
     return pg.insert({
       target_id: target_id,
       createtime: formatted,
       settings: settings,
+      referrer: referrer,
       status: "created",
-      added_by: added_by,
+      added_by: user ? user.user_id : null,
       private: private
     }).returning("*").into("visits");
   },
@@ -220,19 +221,40 @@ module.exports = {
     let dfpm = pg("dfpm_detections").select("*").where({visit_id: visit_id});
     return Promise.all([reqs, resps, dfpm]);
   },
-  get_visit: function(visit_id, user) {
-    let search_base = pg("visits").select(
-      "targets.target_id",
-      "targets.query",
-      "visits.*"
-    ).leftJoin("targets", "visits.target_id", "targets.target_id");
-
+  get_target: function(target_id, user) {
     if (user && user.roles && user.roles.indexOf("admin") > -1) {
-      return search_base.where({
+      return pg("targets").select("targets.*", "users.username").leftJoin("users", "targets.added_by", "users.user_id").where({target_id: target_id});
+    } else {
+      return pg("targets").select("targets.target_id", "targets.createtime", "targets.query", "targets.private")
+      .where({target_id: target_id, private: false}).orWhere({target_id: target_id, added_by: user ? user.user_id : null});
+    }
+  },
+  find_target: function(query) {
+    return pg("targets").select("*").where({query: query}).first();
+  },
+  set_target_privacy(target_id, privacy) {
+    return pg("targets").update({private: privacy}).where({target_id: target_id});
+  },
+  get_visit: function(visit_id, user) {
+    if (user && user.roles && user.roles.indexOf("admin") > -1) {
+      return pg("visits").select(
+        "targets.target_id",
+        "targets.query",
+        "visits.*",
+        "users.username"
+      ).leftJoin("targets", "visits.target_id", "targets.target_id")
+      .leftJoin("users", "visits.added_by", "users.user_id")
+      .where({
         "visits.visit_id": visit_id
       }).first();
     } else { 
-      return search_base.where({
+      return pg("visits").select(
+        "targets.target_id",
+        "targets.query",
+        "visits.visit_id", "visits.target_id", "visits.createtime", "visits.time_actioned", "visits.completed", 
+        "visits.status", "visits.screenshot_path", "visits.settings", "visits.private", "visits.referrer"
+      ).leftJoin("targets", "visits.target_id", "targets.target_id")
+      .where({
         "visits.visit_id": visit_id,
         "visits.private": false
       }).orWhere({
@@ -240,6 +262,9 @@ module.exports = {
         "visits.added_by": user ? user.user_id : null
       }).first();
     }
+  },
+  set_visit_privacy(visit_id, privacy) {
+    return pg("visits").update({private: privacy}).where({visit_id: visit_id});
   },
   add_requests: async function(requests, visit_id) {
     let req_sql = "WITH req(visit_id, request_time, request_post_data, request_url, request_method) AS (VALUES (?::integer, ?::timestamp with time zone, ?, ?, ?)), " +
@@ -359,46 +384,59 @@ module.exports = {
     return pg("visits").update({screenshot_path: screenshot_path}).where({visit_id: visit_id});
   },
   list_visits: function(user, perPage=20, currentPage=1, order=[{column: "visits.visit_id", order: "desc"}]) {
-    let search_base = pg("targets").select(
-      "targets.target_id",
-      "targets.query",
-      "visits.*"
-    ).leftJoin("visits", "targets.target_id", "visits.target_id");
-
     if (user && user.roles && user.roles.indexOf("admin") > -1) {
-      return search_base.orderBy(order)
+      return pg("targets").select(
+        "targets.target_id",
+        "targets.query",
+        "visits.*",
+        "users.username"
+      ).leftJoin("visits", "targets.target_id", "visits.target_id")
+      .leftJoin("users", "targets.added_by", "users.user_id")
+      .orderBy(order)
       .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
     } else {
-      return search_base.where({'visits.private': false})
+      return pg("targets").select(
+        "targets.target_id",
+        "targets.query",
+        "visits.visit_id", "visits.target_id", "visits.createtime", "visits.time_actioned", "visits.completed", 
+        "visits.status", "visits.screenshot_path", "visits.settings", "visits.private", "visits.referrer"
+      ).leftJoin("visits", "targets.target_id", "visits.target_id").where({'visits.private': false})
       .orWhere({"visits.added_by": user ? user.user_id : null})
       .orderBy(order)
       .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
     }
   },
   list_targets: function(user, perPage=20, currentPage=1, order=[{column: "targets.target_id", order: "desc"}]) {
-    console.log(user);
-    let search_base = pg("targets").select("targets.*")
-    .count("visits.*")
-    .leftJoin("visits", "targets.target_id", "visits.target_id");
     if (user && user.roles && user.roles.indexOf("admin") > -1) {
-      return search_base.groupBy("targets.target_id")
+      return pg("targets").select("targets.*", "users.username")
+      .count("visits.*")
+      .leftJoin("visits", "targets.target_id", "visits.target_id")
+      .leftJoin("users", "targets.added_by", "users.user_id")
+      .groupBy("targets.target_id", "users.username")
       .orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
     } else {
-      return search_base.where({'targets.private': false})
+      return pg("targets").select("targets.target_id", "targets.createtime", "targets.query", "targets.private")
+      .count("visits.*")
+      .leftJoin("visits", "targets.target_id", "visits.target_id")
+      .where({'targets.private': false})
       .orWhere({"targets.added_by": user ? user.user_id : null})
       .groupBy("targets.target_id")
       .orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
     }
   },
   list_target_visits: function(target_id, user, perPage=20, currentPage=1, order=[{column: "visits.visit_id", order: "desc"}]) {
-    let search_base = pg("targets").select("targets.target_id", "targets.query", "visits.*")
-    .leftJoin("visits", "targets.target_id", "visits.target_id").where({"targets.target_id": target_id});
-
     if (user && user.roles && user.roles.indexOf("admin") > -1) {
-      return search_base.where({'targets.target_id': target_id})
+      return pg("targets").select("targets.target_id", "targets.query", "visits.*", "users.username")
+      .leftJoin("visits", "targets.target_id", "visits.target_id")
+      .leftJoin("users", "targets.added_by", "users.user_id")
+      .where({'targets.target_id': target_id})
       .orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
     } else {
-      return search_base.where({'visits.private': false, 'targets.target_id': target_id})
+      return pg("targets").select("targets.target_id", "targets.query", 
+      "visits.visit_id", "visits.target_id", "visits.createtime", "visits.time_actioned", "visits.completed", 
+      "visits.status", "visits.screenshot_path", "visits.settings", "visits.private", "visits.referrer")
+      .leftJoin("visits", "targets.target_id", "visits.target_id")
+      .where({'visits.private': false, 'targets.target_id': target_id})
       .orWhere({"visits.added_by": user ? user.user_id : null, 'targets.target_id': target_id})
       .orderBy(order).paginate({perPage: perPage, currentPage: currentPage, isLengthAware: true});
     }
@@ -410,7 +448,7 @@ module.exports = {
   mark_complete: function(visit_id) {
     return pg("visits").update({completed: true}).where({visit_id: visit_id});
   },
-  search_trgm_indexes: function(searchterm, user_id, perPage=20, currentPage=1, order=[{column: 'sml', order: 'desc'}, {column: 'createtime', order: 'desc'}]) {
+  search_trgm_indexes: function(searchterm, user, perPage=20, currentPage=1, order=[{column: 'sml', order: 'desc'}, {column: 'createtime', order: 'desc'}]) {
     let search_base = pg.select('results.*', 'visits.createtime', 'targets.query').from(function() {
       this.select(pg.raw(`header_value AS hit, 'request header value' AS loc, word_similarity(?, header_value) AS sml, visit_id 
         FROM request_headers WHERE ? <% request_headers.header_value`, [searchterm, searchterm]))
@@ -437,9 +475,13 @@ module.exports = {
     if (user && user.roles && user.roles.indexOf("admin") > -1) {
       return search_base.orderBy(order)
       .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
+    } else if (user && user.user_id) {
+      return search_base.where({'visits.private': false})
+      .orWhere({'visits.added_by': user.user_id})
+      .orderBy(order)
+      .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
     } else {
       return search_base.where({'visits.private': false})
-      .orWhere({'visits.added_by': user_id})
       .orderBy(order)
       .paginate({perPage: perPage, currentPage: currentPage, isLengthAware: false});
     }

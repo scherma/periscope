@@ -40,6 +40,15 @@
               <b-col lg="2" class="font-weight-bold">User Agent</b-col><b-col lg="10">{{ visitData.visit.settings.userAgent }}</b-col>
             </b-row>
             <b-row>
+              <b-col lg="2" class="font-weight-bold">Referrer</b-col><b-col lg="10">{{ visitData.visit.referrer }}</b-col>
+            </b-row>
+            <b-row>
+              <b-col lg="2" class="font-weight-bold">Private?</b-col><b-col lg="10"><span v-if="visitData.visit.private">Yes <b-icon-eye-slash></b-icon-eye-slash></span><span v-else>No</span></b-col>
+            </b-row>
+            <b-row v-if="visitData.visit.username">
+              <b-col lg="2" class="font-weight-bold">Submitted by</b-col><b-col lg="10">{{visitData.visit.username}}</b-col>
+            </b-row>
+            <b-row>
               <b-col>&nbsp;</b-col>
             </b-row>
             <b-row>
@@ -83,7 +92,7 @@
             </b-navbar-nav>
             <b-navbar-nav class="ml-auto">
               <b-nav-item right class="visit-nav-item-right">
-                <re-run :target_id="visitData.visit.target_id" :target_url="visitData.visit.query" @visit-rerun="loadNewVisit" v-if="permissions.can_submit"></re-run>
+                <re-run :target_id="visitData.visit.target_id" :target_url="visitData.visit.query" :logged_in="logged_in" @visit-rerun="loadNewVisit" v-if="permissions.can_submit || logged_in"></re-run>
               </b-nav-item>
               <b-nav-item right class="visit-nav-item-right" :href="`/visits/${visitData.visit.visit_id}/allfiles`"> 
                 <b-button size="sm" variant="secondary" right 
@@ -314,7 +323,8 @@ module.exports = {
       title: "",
       visitData: {
         visit: {
-          visit_id: null
+          visit_id: null,
+          target_id: null
         },
         results: {
           summary: {
@@ -349,7 +359,7 @@ module.exports = {
         this.show_login = false;
       }).catch((err) => {
         this.showBase = false;
-        this.visitData = {visit: {visit_id: null}, results: { summary: { total_response_data: "", total_load_time: "" }, requests: [] }, fingerprinting: [] };
+        this.visitData = {visit: {visit_id: null, target_id: null}, results: { summary: { total_response_data: "", total_load_time: "" }, requests: [] }, fingerprinting: [] };
         if (err.response.status == 401) {
           this.logged_in = false;
           this.show_login = true;

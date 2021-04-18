@@ -25,6 +25,10 @@
     </b-row>
     <b-collapse id="collapse-log" v-model="showOptions">
       <b-row>
+        <b-col md="2" class="font-weight-bold">Referrer</b-col>
+        <b-col md="10"><b-input name="referrer" type="text" v-model="form.referrer"></b-input></b-col>
+      </b-row>
+      <b-row>
         <b-col md="2" class="font-weight-bold">Select device</b-col>
         <b-col md="10">
           <b-form-select v-model="selectedDevice" :options="devices" @change="fetchOptions"></b-form-select>
@@ -72,7 +76,7 @@
       </b-row>
       <b-row v-if="logged_in">
         <b-col md="2" class="font-weight-bold">Make private</b-col>
-        <b-col md="4"><b-form-checkbox v-model="form.make_private" class="input-spacing"></b-form-checkbox></b-col>
+        <b-col md="4"><b-form-checkbox v-model="form.private" class="input-spacing"></b-form-checkbox></b-col>
       </b-row>
     </b-collapse>
   </b-form>
@@ -115,7 +119,8 @@ module.exports = {
             isLandscape: null
           }
         },
-        make_private: false
+        private: false,
+        referrer: "https://www.bing.com"
       },
       devices: [],
       deviceOptions: {},

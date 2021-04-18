@@ -26,6 +26,10 @@
         </b-row>
         <b-collapse id="collapse-log" v-model="showOptions">
           <b-row>
+            <b-col md="2" class="font-weight-bold">Referrer</b-col>
+            <b-col md="10"><b-input name="referrer" type="text" v-model="form.referrer"></b-input></b-col>
+          </b-row>
+          <b-row>
             <b-col md="2" class="font-weight-bold">Select device</b-col>
             <b-col md="10">
               <b-form-select v-model="selectedDevice" :options="devices" @change="fetchOptions"></b-form-select>
@@ -75,6 +79,13 @@
             <b-col md="2" class="font-weight-bold">Landscape</b-col>
             <b-col md="4"><b-form-checkbox v-model="form.device.viewport.isLandscape" class="input-spacing"></b-form-checkbox></b-col>
           </b-row>
+          <b-row v-if="logged_in">
+            <b-col>&nbsp;
+          </b-row>
+          <b-row v-if="logged_in">
+            <b-col md="2" class="font-weight-bold">Make private</b-col>
+            <b-col md="4"><b-form-checkbox v-model="form.private" class="input-spacing"></b-form-checkbox></b-col>
+          </b-row>
         </b-collapse>
       </b-form>
     </b-modal>
@@ -109,7 +120,8 @@ module.exports = {
   name: 're-run-target',
   props: {
     target_id: Number,
-    target_url: String
+    target_url: String,
+    logged_in: Boolean
   },
   data: function() {
     return {
@@ -126,7 +138,9 @@ module.exports = {
             hasTouch: null,
             isLandscape: null
           }
-        }
+        },
+        referrer: "https://www.bing.com",
+        private: false
       },
       lastDeviceName: null,
       devices: [],
@@ -140,7 +154,7 @@ module.exports = {
     submit: async function() {
       axios({
         method: "post",
-        url: `/targets/${this.form.target_id}/new-visit`,
+        url: `/targets/${this.target_id}/new-visit`,
         data: this.form,
         errorHandle: false
       }).then((result) => {
@@ -195,6 +209,7 @@ module.exports = {
         url: `/targets/${this.target_id}`
       }).then((response) => {
         let lastRun = response.data.data[0];
+        this.form.referrer = lastRun.referrer;
         this.form.device.userAgent = lastRun.settings.userAgent;
         this.form.device.viewport = lastRun.settings.viewport;
         this.form.device.name = lastRun.settings.name;

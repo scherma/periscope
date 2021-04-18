@@ -245,8 +245,4 @@ Returns a JSON object with a list of requests and list of responses where a head
 
 `curl http://periscope.local/visit/2/screenshot`
 
-Returns 302 to `/images/$visit_date/$visit_id`
-
-`curl http://periscope.local/images/20200105/2.png`
-
 Returns the screenshot for the visit with ID 2
