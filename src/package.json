@@ -25,7 +25,7 @@
     "socket.io": "^3.1.1",
     "vue": "^2.6.12",
     "vue-server-renderer": "^2.6.12",
-    "ws": "^7.4.3"
+    "ws": "^7.4.6"
   },
   "devDependencies": {},
   "scripts": {
