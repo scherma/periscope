@@ -22,7 +22,7 @@
     "bootstrap-vue": "^2.21.2",
     "http-vue-loader": "^1.4.2",
     "material-design-icons": "^3.0.1",
-    "moment": "^2.29.1",
+    "moment": "^2.29.2",
     "popper": "^1.0.1",
     "scss": "^0.2.4",
     "vue": "^2.6.12",
